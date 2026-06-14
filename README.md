@@ -151,11 +151,15 @@ The system architecture seamlessly toggles between local and cloud modes using t
 
 ## Authentication & RBAC
 
-The cloud deployment utilizes robust token-based authentication:
-- **Allowed Users**: Pre-registered email addresses.
-- **Login Mechanism**: Email + generated access token pairing.
-- **Secure Storage**: Access tokens are stored securely in Azure Key Vault (comparable to AWS Secrets Manager).
-- **Local Fallback**: Authentication is completely bypassed during local development unless `KEY_VAULT_URL` or `AUTH_ENABLED` is explicitly configured.
+The cloud deployment uses a lightweight **email + access token** system scoped for this coding challenge:
+- **Allowed Users**: Pre-registered email addresses hardcoded in `auth.py`.
+- **Login Mechanism**: Email + generated access token pairing via `POST /api/auth/init`.
+- **Secure Storage**: Tokens are stored securely in **Azure Key Vault** (the Container App authenticates via its System-Assigned Managed Identity — no credentials in environment variables).
+- **Local Fallback**: Auth is bypassed in local dev unless `KEY_VAULT_URL` or `AUTH_ENABLED` is set.
+
+> **⚠️ Production Note**: In a real enterprise deployment, this custom token system would be replaced entirely with **Microsoft Entra ID (Azure AD)** using **Security Groups** for role-based access. Users would SSO with their existing corporate credentials — no shadow IDs, no manual token management. The frontend would use `@azure/msal-react` for OAuth 2.0 flows and the backend would validate short-lived JWTs with group membership checks. The architecture is designed so only `auth.py` needs to change to adopt this pattern.
+>
+> See [`docs/backend_api.md`](docs/backend_api.md#authentication--current-implementation--production-roadmap) for a full comparison and code example.
 
 ---
 
@@ -166,6 +170,7 @@ For in-depth, code-level documentation and UML diagrams, please review the files
 - **[Backend API Design](docs/backend_api.md)**
 - **[LLM Configuration & Integrations](docs/llm_configuration.md)**
 - **[MCP Tooling Protocol](docs/mcp_tools.md)**
+- **[Production Multi-Agent Architecture](docs/production_multi_agent_architecture.md)** — Full vision for a productionized MAS with Planner/Child agents, HITL guardrails, CI/CD automation agents, and Azure vs AWS infrastructure mapping.
 
 *(Note: Frontend-specific UI documentation is deliberately kept light in favor of heavier backend and system design documentation).*
 
