@@ -20,7 +20,6 @@ services:
       - MCP_SERVER_PATH=/app/mcp_server/mcp_server.py
       - OLLAMA_HOST=http://host.docker.internal:11434
       - OLLAMA_MODEL=qwen2.5:0.5b
-      - OLLAMA_NUM_GPU=0
       - MAX_REACT_ITERATIONS=10
     volumes:
       - ./backend/data:/app/data
