@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import './index.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED === 'true'
 
 interface TraceEvent {
   step: number
@@ -32,7 +33,7 @@ const EXAMPLE_PROMPTS = [
 ]
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('session_token'))
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !AUTH_ENABLED || !!localStorage.getItem('session_token'))
   const [authEmail, setAuthEmail] = useState(() => localStorage.getItem('auth_email') || '')
   const [loginEmail, setLoginEmail] = useState('')
   const [loginToken, setLoginToken] = useState('')
@@ -206,7 +207,7 @@ function App() {
     setAuthEmail('')
   }
 
-  if (!isAuthenticated) {
+  if (AUTH_ENABLED && !isAuthenticated) {
     return (
       <div className="login-page">
         <div className="login-card">
