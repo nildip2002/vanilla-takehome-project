@@ -190,6 +190,10 @@ resource "azurerm_container_app_environment" "main" {
 
 # ─── Container App (Backend) ─────────────────────────────────────────────────
 resource "azurerm_container_app" "backend" {
+  identity {
+    type = "SystemAssigned"
+  }
+
   name                         = "${local.prefix}-backend"
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
@@ -296,6 +300,17 @@ resource "azurerm_container_app" "backend" {
   }
 
   tags = local.tags
+}
+
+# ─── Key Vault access policy for Container App managed identity ──────────────
+resource "azurerm_key_vault_access_policy" "backend" {
+  key_vault_id = azurerm_key_vault.main.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = tostring(try(azurerm_container_app.backend.identity[0].principal_id, ""))
+
+  secret_permissions = ["Get", "Set", "List", "Delete"]
+
+  depends_on = [azurerm_container_app.backend]
 }
 
 # ─── Static Web App (Frontend) ───────────────────────────────────────────────

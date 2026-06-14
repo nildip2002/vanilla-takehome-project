@@ -228,3 +228,65 @@ The API allows all origins in development (`allow_origins=["*"]`). For productio
 FastAPI auto-generates interactive API docs:
 - **Swagger UI**: `http://localhost:8000/docs`
 - **ReDoc**: `http://localhost:8000/redoc`
+
+---
+
+## Authentication — Current Implementation & Production Roadmap
+
+### Current Implementation (Challenge Scope)
+
+The current auth system uses a lightweight **email + access token** approach appropriate for a coding challenge:
+
+| Component | Implementation |
+|-----------|---------------|
+| Token generation | `secrets.token_urlsafe(32)` — cryptographically secure random tokens |
+| Token storage | **Local dev**: In-memory dict; **Cloud**: Azure Key Vault secrets |
+| Token verification | `secrets.compare_digest()` — timing-safe comparison |
+| Session | Token stored in `localStorage`, sent as `Bearer email:token` header |
+| User allowlist | Hardcoded `ALLOWED_EMAILS` list in `auth.py` |
+| Initialization | `POST /api/auth/init` — one-time setup generating tokens for all users |
+
+This provides a meaningful security layer for a demo system while keeping the implementation reviewable.
+
+### Production Recommendation — Azure AD / Entra ID with Security Groups
+
+In a fully productionized system, this custom token auth would be replaced with **Microsoft Entra ID (formerly Azure Active Directory)** integration. This is the standard enterprise pattern at institutions like BMO:
+
+```
+Current (Challenge):         Production (Enterprise):
+─────────────────────        ──────────────────────────────────────────────
+Email + static token    →    OAuth 2.0 / OIDC via Entra ID
+Hardcoded allowlist     →    Azure AD Security Groups (e.g. "BMO-Agent-Users")
+Manual token init       →    SSO — no credentials to manage
+localStorage token      →    Short-lived JWT (15 min) + refresh token rotation
+No MFA                  →    Conditional Access Policies + MFA enforced by AAD
+Manual user management  →    Group membership managed in Azure AD by IT admins
+```
+
+**How it would work with Entra ID:**
+
+1. **App Registration** — Register the app in Azure AD, define scopes (`agent.read`, `agent.write`).
+2. **Security Groups** — Create `BMO-Agent-Users` group in Azure AD. IT admins add/remove members.
+3. **MSAL Authentication** — Frontend uses `@azure/msal-react` to handle OAuth 2.0 login flows (redirect or popup). Zero custom auth code.
+4. **Backend Validation** — FastAPI validates the incoming JWT using `azure-identity` or `python-jose`, checking the `groups` claim to enforce role-based access.
+5. **Conditional Access** — Azure AD policies enforce MFA, device compliance, and IP restrictions — no backend code changes needed.
+
+```python
+# Production pattern (not implemented — challenge scope):
+from fastapi_azure_auth import SingleTenantAzureAuthorizationCodeBearer
+
+azure_scheme = SingleTenantAzureAuthorizationCodeBearer(
+    app_client_id=os.environ["AZURE_CLIENT_ID"],
+    tenant_id=os.environ["AZURE_TENANT_ID"],
+    scopes={"api://bmo-agent/agent.read": "Read access"},
+)
+
+@router.post("/task")
+def create_task(req: TaskRequest, token=Security(azure_scheme)):
+    # token.groups contains the user's AD group memberships
+    if "BMO-Agent-Users" not in token.groups:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    ...
+```
+
+> **Note**: The current implementation is intentionally scoped for a coding challenge. The architecture is designed so that `auth.py` is the only file that would need to change to adopt Entra ID — the rest of the backend is auth-provider agnostic.
