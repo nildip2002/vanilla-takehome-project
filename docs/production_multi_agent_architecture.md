@@ -1,6 +1,8 @@
 # Production Multi-Agent System Architecture
 
-> **Context**: This document describes the production evolution of the BMO Agentic Execution Framework — from a single ReAct-loop agent to a fully productionized **Multi-Agent System (MAS)** with enterprise-grade security, progressive CI/CD, HITL guardrails, and zero-trust networking on Azure.
+> ⚠️ **Hypothetical Design Document**
+> 
+> This document is a **forward-looking architectural vision**, not a migration plan. It describes what a fully productionized version of the BMO Agentic Execution Framework *could* look like if deployed at enterprise scale. Nothing in this document is being actively implemented — it is intended to demonstrate architectural thinking, Azure platform depth, and production engineering judgment as part of the BMO coding challenge submission.
 
 ---
 
@@ -378,24 +380,24 @@ On every PR to agent prompts or flow definitions:
 
 ### Current Test Suite
 
-The project includes a comprehensive **pytest** test suite (`backend/tests/test_main.py`) covering:
+The project includes a comprehensive **pytest** test suite across two test files covering:
 
 | Test Category | Count | What's Tested |
 |--------------|-------|---------------|
-| API endpoints | 12 | CRUD operations, validation, error responses |
-| Agent execution | 8 | ReAct loop, tool dispatch, trace recording |
-| MCP tools | 8 | Each tool's happy path + edge cases |
-| Authentication | 6 | Login flow, token validation, unauthorized access |
-| Database layer | 7 | Repository pattern, CRUD, concurrent access |
-| Health checks | 3 | LLM status, DB connectivity, overall health |
-| Edge cases | 3 | Invalid UUIDs, empty input, malformed JSON |
-| **Total** | **47** | |
+| REST API endpoints | 25 | CRUD, validation, status codes, SSE 404 |
+| Repository layer | 12 | CRUD, cascade delete, user_id, error cases |
+| Database models | 4 | ORM creation, FK integrity, defaults |
+| MCP tools (all 8) | 82 | Happy path + edge cases + error handling |
+| Auth validation | 4 | Email allowlist, missing fields |
+| Task lifecycle | 7 | Status machine, ordering, limits |
+| Execution traces | 5 | Ordering, types, content preservation |
+| **Total** | **134** | All passing |
 
 ### Test Strategy (Pre + Post Deploy)
 
 ```
 Pre-Deploy (CI):
-├── pytest -v --tb=short (all 47 unit tests)
+├── pytest -v --tb=short (all 134 unit tests)
 ├── ESLint + TypeScript compilation (frontend)
 └── Docker build validation (catches missing deps)
 
@@ -607,57 +609,22 @@ Cosmos DB Change Feed → Azure Functions →
 
 ---
 
-## Implementation Roadmap
+## Hypothetical Implementation Phases
 
-### Phase 1: Foundation (Weeks 1-4)
+> ⚠️ The phases below are **illustrative only** — they describe the logical order in which this architecture *would* be built, not a committed delivery plan.
 
-- [ ] Migrate auth from Key Vault tokens → Entra ID App Registration
-- [ ] Set up Hub-Spoke VNet with Private Endpoints
-- [ ] Deploy Service Bus namespace with agent topic/subscriptions
-- [ ] Implement Planner Agent with DAG decomposition
-- [ ] Add Durable Functions for saga orchestration
-- [ ] Wire up Microsoft Graph for Teams notifications
+### Phase 1: Foundation
+Establish identity, networking, and messaging infrastructure. Replace the current token-based auth with Entra ID. Deploy the Hub-Spoke VNet with Private Endpoints. Stand up Service Bus and the Planner Agent.
 
-### Phase 2: Agent Fleet (Weeks 5-8)
+### Phase 2: Agent Fleet
+Build and deploy the six specialized child agents (Code, Research, Data, QA, DevOps, CI/CD). Wire up async fan-out/fan-in via Service Bus topics. Enable Conditional Access for device trust.
 
-- [ ] Implement Code Agent (Claude integration + git tools)
-- [ ] Implement QA Agent (test generation + validation)
-- [ ] Implement Research Agent (Azure AI Search RAG)
-- [ ] Implement Data Agent (read-only SQL + pandas)
-- [ ] Add async fan-out/fan-in via Service Bus
-- [ ] Deploy Conditional Access policies (MFA, device compliance)
+### Phase 3: DevOps Automation
+Implement the DevOps and CI/CD Agents. Add canary rollout logic, self-healing pipeline (auto-fix failing tests via Code Agent), and progressive traffic splitting in Container Apps.
 
-### Phase 3: DevOps & CI/CD Automation (Weeks 9-12)
-
-- [ ] Implement DevOps Agent with Terraform/az CLI tools
-- [ ] Build CI/CD Agent (GitHub webhook → Event Grid)
-- [ ] Implement canary rollout with auto-rollback
-- [ ] Self-healing pipeline (auto-fix failing tests)
-- [ ] Progressive traffic splitting in Container Apps
-
-### Phase 4: Harden & Scale (Weeks 13-16)
-
-- [ ] Deploy Azure Front Door with WAF rules
-- [ ] Enable Microsoft Sentinel with custom detection rules
-- [ ] Implement full HITL approval flow via Teams adaptive cards
-- [ ] Load testing (Locust) + chaos engineering (Azure Chaos Studio)
-- [ ] SOC2 audit trail validation
-- [ ] Penetration testing (external firm)
-- [ ] Documentation + runbooks for on-call team
+### Phase 4: Harden & Operate
+Deploy WAF, Sentinel SIEM with custom detection rules, full HITL Teams approval flow, load testing, chaos engineering (Azure Chaos Studio), SOC2 audit trail, and external penetration testing.
 
 ---
 
-## Key Differences from Current Implementation
-
-| What exists now | What production adds |
-|----------------|---------------------|
-| `backend/auth.py` — token in Key Vault | Entra ID + Conditional Access + Microsoft Graph |
-| `backend/telemetry.py` — App Insights basic | Full OpenTelemetry + Sentinel SIEM + agent-level custom metrics |
-| `backend/agent.py` — single ReAct loop | Planner + 6 specialized child agents communicating via Service Bus |
-| `infra/main.tf` — flat resources | Hub-Spoke VNet + Private Endpoints + WAF + DDoS |
-| `.github/workflows/deploy.yml` — simple CI/CD | Agent-enhanced pipeline with canary + self-healing + HITL gates |
-| `backend/repository.py` — CRUD | Event-sourced with Change Feed projections + saga pattern |
-
----
-
-> **Note**: This architecture is designed for incremental adoption. Each phase builds on the previous without requiring rewrites. The current BMO Agent codebase already implements the core patterns (ReAct loop, tool calling, streaming, persistence, LLM abstraction, repository pattern) that serve as the direct foundation for Phase 1.
+> **Summary**: This document demonstrates how the core patterns already implemented in the BMO codebase — ReAct loop, tool calling, SSE streaming, persistence layer, LLM abstraction, repository pattern — directly compose into an enterprise-grade Multi-Agent System. The hypothetical architecture is grounded in real Azure services and real design trade-offs, but it represents a vision, not a migration.

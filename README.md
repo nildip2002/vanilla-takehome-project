@@ -63,16 +63,157 @@ All stages use **dependency caching** (pip, npm, Docker layers) for fast CI runs
 
 ---
 
-## Quick Start
+## Local Development Setup
 
-### Local Development (Docker)
+### Prerequisites
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Python | 3.11+ | Backend API + MCP server |
+| Node.js | 20+ | Frontend build tooling |
+| Ollama | Latest | Local LLM inference engine |
+| Docker + Compose | 24+ / v2 plugin | Containerized deployment |
+| Git | 2.x | Version control |
+
+---
+
+### Step 1: Install System Dependencies
+
+<details>
+<summary><strong>🐧 Linux (Ubuntu/Debian)</strong></summary>
 
 ```bash
-# Ensure Ollama is running locally
+# Python 3.11
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3-pip
+
+# Node.js 20 (via NodeSource)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Docker Engine + Compose plugin
+sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# Add your user to docker group (avoids sudo)
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+</details>
+
+<details>
+<summary><strong>🪟 Windows (WSL2)</strong></summary>
+
+```powershell
+# 1. Install WSL2 (PowerShell as Admin)
+wsl --install -d Ubuntu-22.04
+
+# 2. Inside WSL2 terminal, follow the Linux steps above
+
+# 3. Docker Desktop alternative (recommended for Windows):
+#    Download from https://www.docker.com/products/docker-desktop/
+#    Enable "Use WSL 2 based engine" in Docker Desktop settings
+#    Enable integration with your WSL2 distro
+
+# 4. Ollama for Windows (native, runs outside WSL)
+#    Download from https://ollama.com/download/windows
+#    Or inside WSL2:
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+**Important WSL2 notes:**
+- Docker Desktop provides `docker compose` to WSL2 automatically
+- Ollama running on Windows is accessible from WSL2 at `http://host.docker.internal:11434`
+- Set `OLLAMA_HOST=http://host.docker.internal:11434` if running Ollama on Windows side
+
+</details>
+
+<details>
+<summary><strong>🍎 macOS</strong></summary>
+
+```bash
+# Homebrew (if not installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Python 3.11
+brew install python@3.11
+
+# Node.js 20
+brew install node@20
+
+# Docker Desktop (includes Compose v2)
+brew install --cask docker
+# Then open Docker Desktop from Applications and complete setup
+
+# Ollama
+brew install ollama
+```
+
+</details>
+
+---
+
+### Step 2: Create Python Environment
+
+Using **conda** (recommended):
+
+```bash
+conda create -n bmo-agent python=3.11 -y
+conda activate bmo-agent
+pip install -r backend/requirements.txt
+pip install -r mcp_server/requirements.txt
+```
+
+Or using **venv**:
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate          # Linux/macOS
+# .venv\Scripts\activate           # Windows PowerShell
+pip install -r backend/requirements.txt
+pip install -r mcp_server/requirements.txt
+```
+
+---
+
+### Step 3: Install Frontend Dependencies
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+---
+
+### Step 4: Start Ollama + Pull Model
+
+```bash
+# Start Ollama server (runs in background)
 ollama serve &
+
+# Pull the lightweight model used for local dev
 ollama pull qwen2.5:0.5b
 
-# Start all services (Frontend, Backend, SQLite DB)
+# Verify it's running
+curl http://localhost:11434/api/tags
+```
+
+---
+
+### Step 5: Run the Application
+
+#### Option A: Docker Compose (Recommended)
+
+```bash
 docker compose up --build
 
 # Frontend: http://localhost:3000
@@ -80,18 +221,56 @@ docker compose up --build
 # Swagger:  http://localhost:8000/docs
 ```
 
-### Local Development (Manual Setup)
+> **Note:** If `docker compose` doesn't work, you may need to install the Compose plugin:
+> ```bash
+> # Linux
+> sudo apt install docker-compose-plugin
+> # Or manual install
+> mkdir -p ~/.docker/cli-plugins
+> curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
+> chmod +x ~/.docker/cli-plugins/docker-compose
+> ```
+
+#### Option B: Manual (Without Docker)
 
 ```bash
-# 1. Start the Backend
+# Terminal 1 — Backend
+conda activate bmo-agent   # or: source .venv/bin/activate
 cd backend
-pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
-# 2. Start the Frontend (in a new terminal)
+# Terminal 2 — Frontend
 cd frontend
-npm install && npm run dev
+npm run dev
+
+# Frontend: http://localhost:5173
+# Backend:  http://localhost:8000
 ```
+
+---
+
+### Step 6: Run Unit Tests
+
+```bash
+conda activate bmo-agent   # or: source .venv/bin/activate
+cd backend
+python -m pytest -v --tb=short
+
+# Expected: 90+ tests passing
+```
+
+---
+
+### Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| `docker compose` → "unknown flag" | Install compose plugin (see Option A note above) |
+| `ollama serve` → "address already in use" | Ollama is already running — proceed to `ollama pull` |
+| Frontend can't reach backend | Check CORS — backend must be on port 8000 |
+| `ModuleNotFoundError` in backend | Activate your conda/venv environment first |
+| WSL2: Ollama connection refused | Set `OLLAMA_HOST=http://host.docker.internal:11434` if Ollama runs on Windows |
+| macOS: Docker permission denied | Open Docker Desktop app first — it starts the daemon |
 
 ---
 
