@@ -33,6 +33,7 @@ class ToolCall:
     """Normalized tool call from any LLM provider."""
     name: str
     arguments: dict
+    id: str | None = None  # tool_call_id required by OpenAI-spec providers
 
 
 @dataclass
@@ -148,12 +149,28 @@ class FoundryLLMClient:
                 args = tc.function.arguments
                 if isinstance(args, str):
                     args = json.loads(args)
-                tool_calls.append(ToolCall(name=tc.function.name, arguments=args))
+                tool_calls.append(ToolCall(name=tc.function.name, arguments=args, id=tc.id))
 
         return LLMResponse(
             content=content,
             tool_calls=tool_calls,
-            raw={"role": "assistant", "content": content, "tool_calls": message.tool_calls},
+            raw={
+                "role": "assistant",
+                "content": content or None,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments
+                            if isinstance(tc.function.arguments, str)
+                            else json.dumps(tc.function.arguments),
+                        },
+                    }
+                    for tc in (message.tool_calls or [])
+                ] or None,
+            },
         )
 
     async def health_check(self) -> dict:
@@ -224,12 +241,28 @@ class OpenAILLMClient:
                 args = tc.function.arguments
                 if isinstance(args, str):
                     args = json.loads(args)
-                tool_calls.append(ToolCall(name=tc.function.name, arguments=args))
+                tool_calls.append(ToolCall(name=tc.function.name, arguments=args, id=tc.id))
 
         return LLMResponse(
             content=content,
             tool_calls=tool_calls,
-            raw={"role": "assistant", "content": content},
+            raw={
+                "role": "assistant",
+                "content": content or None,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments
+                            if isinstance(tc.function.arguments, str)
+                            else json.dumps(tc.function.arguments),
+                        },
+                    }
+                    for tc in (message.tool_calls or [])
+                ] or None,
+            },
         )
 
     async def health_check(self) -> dict:

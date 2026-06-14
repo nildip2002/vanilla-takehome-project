@@ -191,10 +191,17 @@ async def execute_task(task_id: str, raw_input: str, repo: Repository) -> AsyncG
                                 result_str = f"Tool execution error: {tool_exc}"
                                 yield _emit_trace(repo, task_id, step_counter, "tool_error", result_str)
                                 step_counter += 1
-                                messages.append({"role": "tool", "content": result_str})
+                                tool_err_msg: dict = {"role": "tool", "content": result_str}
+                                if getattr(tc, "id", None):
+                                    tool_err_msg["tool_call_id"] = tc.id
+                                messages.append(tool_err_msg)
                                 continue
 
-                            messages.append({"role": "tool", "content": result_str})
+                            # OpenAI-spec requires tool_call_id to link result back to the call
+                            tool_res_msg: dict = {"role": "tool", "content": result_str}
+                            if getattr(tc, "id", None):
+                                tool_res_msg["tool_call_id"] = tc.id
+                            messages.append(tool_res_msg)
                             yield _emit_trace(
                                 repo, task_id, step_counter, "tool_result",
                                 f"{tc.name} → {result_str}",
