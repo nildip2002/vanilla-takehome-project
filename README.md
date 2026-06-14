@@ -483,6 +483,49 @@ The cloud deployment uses a lightweight **email + access token** system scoped f
 
 ---
 
+## Assumptions and Tradeoffs
+
+### 🔐 Auth: Custom Token Store vs. Microsoft Entra ID
+*   **Tradeoff:** For the scope of this coding challenge, we implemented a custom token authentication mechanism. Access tokens are initialized and stored securely in Azure Key Vault (with the backend app reading them via its Managed Identity).
+*   **Tradeoff details:** This is much faster to bootstrap and test than registering a full enterprise app, but it lacks OAuth 2.0, refresh tokens, and enterprise-grade SSO. In a true enterprise environment at BMO, this would be replaced with Microsoft Entra ID (Azure AD) using JWT validation and role-based active directory groups.
+
+### 💾 Persistence: Repository Pattern & SQLite Fallback
+*   **Assumption:** We assume that developers want a zero-configuration local setup.
+*   **Tradeoff:** The repository pattern abstracts database operations so the system uses Cosmos DB in production and falls back to SQLite locally. However, SQLite does not replicate Cosmos DB's partition key scaling, transactional batch behaviors, or eventual consistency profiles.
+
+### 🤖 LLM: Lightweight Local Model vs. Cloud API
+*   **Assumption:** Developers might develop locally without high-end GPU hardware, so we default local execution to Ollama running a tiny model (`qwen2.5:0.5b`).
+*   **Tradeoff:** 0.5B models struggle with complex multi-step ReAct loops, JSON outputs, and parameter extraction. Consequently, local runs may occasionally produce formatting errors or loop timeouts, whereas the cloud runs (using `gpt-4.1-nano` or `gpt-4o-mini`) are extremely stable and precise.
+
+### 🛠️ Tool Execution: Subprocess MCP vs. Distributed Microservice
+*   **Assumption:** The Model Context Protocol (MCP) server is run as a subprocess or imported directly.
+*   **Tradeoff:** This keeps deployment packaging simple, but it is not scalable or isolated. In a larger deployment, the MCP server would run in its own container, communicating over network sockets (SSE or WebSockets), permitting independent scaling of tools.
+
+---
+
+## Time Spent
+
+The total implementation time was **~2.5 hours**, heavily accelerated via pair-programming and automation using **Claude Code**. 
+
+Without AI-assisted development, bootstrapping the dual-mode architecture, implementing the 134 robust unit tests, configuring the Terraform modules, building the React UI dashboard, and generating detailed system diagrams/documentation would have typically required **~26 hours** of manual engineering effort.
+
+---
+
+## Anything We Would Improve with More Time
+
+1. **State Persistence and Resumption (Check-pointing):**
+   Currently, the ReAct loop runs in-memory. If a container app scales to zero or restarts mid-loop, execution state is lost. We would persist intermediate agent thoughts and tool results in Cosmos DB to allow robust task recovery and resumption.
+2. **Distributed Queue-based Architecture:**
+   Transition the execution from direct HTTP endpoint processing to an asynchronous message-passing queue (e.g., Azure Service Bus or RabbitMQ). This would let background workers pull tasks, scaling backend compute independent of HTTP API nodes.
+3. **Enterprise Authentication (Entra ID / OAuth 2.0):**
+   Fully integrate `@azure/msal-react` on the frontend and JWT verification middleware on the backend to enforce zero-trust, enterprise identity federation.
+4. **LLM Evaluation & Content Safety Pipelines:**
+   Incorporate automated evaluation suites (e.g., Prompt Flow evaluations or Ragas) into the CI/CD pipeline to flag quality regressions. Add robust PII masking and prompt injection guardrails before sending requests to the LLM.
+5. **Dynamic MCP Tool Registry:**
+   Enable dynamically registering or loading tools via a config file or API, allowing hot-reloads of tools without restarting the backend agent service.
+
+---
+
 ## Documentation Index
 
 For in-depth, code-level documentation and UML diagrams, please review the files inside the `docs/` folder:
