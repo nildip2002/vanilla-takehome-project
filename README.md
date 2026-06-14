@@ -110,7 +110,43 @@ curl -fsSL https://ollama.com/install.sh | sh
 </details>
 
 <details>
-<summary><strong>🪟 Windows (WSL2)</strong></summary>
+<summary><strong>🪟 Windows (Native — No WSL)</strong></summary>
+
+**Install via installers:**
+
+1. **Python 3.11+**
+   - Download: https://www.python.org/downloads/windows/
+   - ✅ Check "Add Python to PATH" during installation
+
+2. **Node.js 20+**
+   - Download: https://nodejs.org/en/download/ (LTS version)
+
+3. **Docker Desktop**
+   - Download: https://www.docker.com/products/docker-desktop/
+   - Includes Compose v2 by default
+   - No need to enable WSL2 integration for native Windows
+
+4. **Ollama**
+   - Download: https://ollama.com/download/windows
+   - Runs as a Windows service on `http://localhost:11434`
+
+5. **Git**
+   - Download: https://git-scm.com/download/win
+   - Or use GitHub Desktop: https://desktop.github.com/
+
+**Verify installations (PowerShell):**
+
+```powershell
+python --version          # Should show 3.11+
+node --version            # Should show v20+
+docker --version          # Should show 24+
+ollama --version          # Should show ollama version
+```
+
+</details>
+
+<details>
+<summary><strong>🪟 Windows (WSL2 — Recommended for Developers)</strong></summary>
 
 ```powershell
 # 1. Install WSL2 (PowerShell as Admin)
@@ -118,21 +154,24 @@ wsl --install -d Ubuntu-22.04
 
 # 2. Inside WSL2 terminal, follow the Linux steps above
 
-# 3. Docker Desktop alternative (recommended for Windows):
+# 3. Docker Desktop:
 #    Download from https://www.docker.com/products/docker-desktop/
-#    Enable "Use WSL 2 based engine" in Docker Desktop settings
-#    Enable integration with your WSL2 distro
+#    ✅ Enable "Use WSL 2 based engine" in Docker Desktop settings
+#    ✅ Enable integration with your WSL2 Ubuntu distro
 
-# 4. Ollama for Windows (native, runs outside WSL)
-#    Download from https://ollama.com/download/windows
-#    Or inside WSL2:
+# 4. Ollama — two options:
+#    Option A: Install in WSL2 (recommended)
 curl -fsSL https://ollama.com/install.sh | sh
+
+#    Option B: Install on Windows (native)
+#    Download from https://ollama.com/download/windows
+#    Access from WSL2 via: http://host.docker.internal:11434
 ```
 
 **Important WSL2 notes:**
 - Docker Desktop provides `docker compose` to WSL2 automatically
-- Ollama running on Windows is accessible from WSL2 at `http://host.docker.internal:11434`
-- Set `OLLAMA_HOST=http://host.docker.internal:11434` if running Ollama on Windows side
+- If Ollama runs on Windows, set `OLLAMA_HOST=http://host.docker.internal:11434` in WSL2
+- All commands in this guide run inside the WSL2 terminal
 
 </details>
 
@@ -175,12 +214,25 @@ pip install -r mcp_server/requirements.txt
 Or using **venv**:
 
 ```bash
+# Linux/macOS/WSL2
 python3.11 -m venv .venv
-source .venv/bin/activate          # Linux/macOS
-# .venv\Scripts\activate           # Windows PowerShell
+source .venv/bin/activate
 pip install -r backend/requirements.txt
 pip install -r mcp_server/requirements.txt
 ```
+
+```powershell
+# Windows (PowerShell)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
+pip install -r mcp_server\requirements.txt
+```
+
+> **Windows note:** If you get "execution of scripts is disabled", run:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
 
 ---
 
@@ -196,11 +248,25 @@ cd ..
 
 ### Step 4: Start Ollama + Pull Model
 
+**Linux/macOS/WSL2:**
+
 ```bash
 # Start Ollama server (runs in background)
 ollama serve &
 
 # Pull the lightweight model used for local dev
+ollama pull qwen2.5:0.5b
+
+# Verify it's running
+curl http://localhost:11434/api/tags
+```
+
+**Windows (native):**
+
+Ollama installs as a Windows service and starts automatically. Just pull the model:
+
+```powershell
+# Pull the model (PowerShell or Command Prompt)
 ollama pull qwen2.5:0.5b
 
 # Verify it's running
@@ -233,6 +299,8 @@ docker compose up --build
 
 #### Option B: Manual (Without Docker)
 
+**Linux/macOS/WSL2:**
+
 ```bash
 # Terminal 1 — Backend
 conda activate bmo-agent   # or: source .venv/bin/activate
@@ -240,6 +308,22 @@ cd backend
 uvicorn main:app --reload --port 8000
 
 # Terminal 2 — Frontend
+cd frontend
+npm run dev
+
+# Frontend: http://localhost:5173
+# Backend:  http://localhost:8000
+```
+
+**Windows (PowerShell):**
+
+```powershell
+# Terminal 1 — Backend
+conda activate bmo-agent   # or: .venv\Scripts\Activate.ps1
+cd backend
+uvicorn main:app --reload --port 8000
+
+# Terminal 2 — Frontend (new PowerShell window)
 cd frontend
 npm run dev
 
