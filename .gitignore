@@ -1,0 +1,53 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+venv/
+.venv/
+
+# ─── Development artifacts ────────────────────────────────────────────────
+graphify-out/
+temp/
+*.pdf
+
+# ─── Conda env files (Docker uses requirements.txt) ──────────────────────
+environment.yml
+environment-full.yml
+
+# ─── Nginx (Container Apps handles routing in cloud) ─────────────────────
+nginx/
+
+# ─── Database files ──────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Build artifacts ─────────────────────────────────────────────────────
+dist/
+build/
+frontend/dist/
+
+# ─── IDE / OS ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+.claude/
+
+# ─── Secrets ─────────────────────────────────────────────────────────────
+.env
+.env.*
+
+# ─── Terraform state ─────────────────────────────────────────────────────
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# ─── Extracted text ──────────────────────────────────────────────────────
+challenge.txt
+challenge_original.txt
