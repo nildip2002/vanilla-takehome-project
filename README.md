@@ -1,8 +1,55 @@
 # BMO Agent - Agentic Execution Framework
 
-A production-grade AI agent system with dual-mode deployment: local (Ollama + SQLite) and cloud (Azure Foundry + Cosmos DB). Interprets natural language tasks, reasons using a ReAct loop, executes 8 deterministic tools via MCP, and streams results in real-time.
+A production-grade AI agent system with dual-mode deployment: local (Ollama + SQLite) and cloud (Azure Foundry + Cosmos DB). The system interprets natural language tasks, reasons using a ReAct loop, executes 8 deterministic tools via the Model Context Protocol (MCP), and streams results in real-time.
 
 ![System Architecture](docs/diagrams/system_architecture.png)
+
+For a deeper dive into the codebase architecture, API design, and internal logic, please refer to the [docs/](docs/) directory, which contains comprehensive UML-related and codebase documentation (e.g., `architecture.md`, `backend_api.md`, `llm_configuration.md`, `mcp_tools.md`).
+
+---
+
+## Technical Stack Overview
+
+This project is built using modern, scalable technologies, clearly separated into distinct tiers to ensure maintainability and deployment flexibility.
+
+### 🧠 LLM / AI Stack
+- **Agent Architecture:** ReAct (Reasoning and Acting) loop for multi-step problem solving.
+- **Local AI:** Ollama running `qwen2.5:0.5b` for fast, cost-free local development and testing.
+- **Cloud AI:** Microsoft Foundry (Azure AI) running `gpt-4.1-nano` for production workloads, featuring built-in content safety, prompt evaluation, and an enterprise SLA.
+- **Tool Orchestration:** Model Context Protocol (MCP) server managing 8 distinct tools (text processing, calculation, weather mocking, datetime manipulation, etc.).
+
+### ☁️ Cloud & Infrastructure Stack
+- **Infrastructure as Code (IaC):** Terraform (`azurerm` provider) managing the entire Azure footprint.
+- **Hosting (Compute):** Azure Container Apps (Consumption tier) for auto-scaling, scale-to-zero backend microservices. Azure Static Web Apps for globally distributed frontend CDN hosting.
+- **Data Persistence:** Azure Cosmos DB (Free Tier NoSQL) for scalable, globally distributed document storage. Local development gracefully falls back to SQLite via a repository abstraction layer.
+- **Security:** Azure Key Vault for secure storage of access tokens and secrets.
+- **Observability:** Azure Application Insights providing distributed tracing, log aggregation, and real-time telemetry.
+- **Containerization:** Docker & Docker Compose for isolated execution environments and ACR (Azure Container Registry) for cloud image distribution.
+
+### ⚙️ Backend Stack
+- **Framework:** FastAPI (Python 3.11+) providing high-performance asynchronous endpoints and WebSocket/SSE streaming.
+- **ORM / Data Validation:** SQLModel (Pydantic + SQLAlchemy) handling data schemas and database migrations.
+- **Real-Time Streaming:** `sse-starlette` delivering execution traces to the frontend in real time.
+
+### 🖥️ Frontend Stack
+- **Framework:** React 18 + Vite + TypeScript.
+- **Design System:** Custom CSS providing a "Terminal Luxe" aesthetic tailored for internal agent interactions.
+
+---
+
+## Core Workflows & Diagrams
+
+### Agent Execution Flow
+
+The agent utilizes a ReAct loop to iteratively break down complex tasks, select the appropriate tools, and evaluate the results before arriving at a final answer.
+
+![Agent Flow](docs/diagrams/agent_flow.png)
+
+### CI/CD Pipeline
+
+Continuous Integration and Continuous Deployment are managed via GitHub Actions. Pushing to the `main` branch automatically triggers testing, building, and deployment to the Azure cloud environment.
+
+![CI/CD Pipeline](docs/diagrams/cicd_pipeline.png)
 
 ---
 
@@ -11,11 +58,11 @@ A production-grade AI agent system with dual-mode deployment: local (Ollama + SQ
 ### Local Development (Docker)
 
 ```bash
-# Ensure Ollama is running
+# Ensure Ollama is running locally
 ollama serve &
 ollama pull qwen2.5:0.5b
 
-# Start all services
+# Start all services (Frontend, Backend, SQLite DB)
 docker compose up --build
 
 # Frontend: http://localhost:3000
@@ -23,68 +70,24 @@ docker compose up --build
 # Swagger:  http://localhost:8000/docs
 ```
 
-### Local Development (Manual)
+### Local Development (Manual Setup)
 
 ```bash
-# Backend
+# 1. Start the Backend
 cd backend
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
-# Frontend (new terminal)
+# 2. Start the Frontend (in a new terminal)
 cd frontend
 npm install && npm run dev
 ```
 
 ---
 
-## Architecture
+## MCP Tools (8 Included)
 
-### Dual-Mode Design
-
-| Component | Local | Cloud (Azure) |
-|-----------|-------|---------------|
-| LLM | Ollama (qwen2.5:0.5b) | Azure Foundry (GPT-4.1-nano) |
-| Database | SQLite | Cosmos DB (Free Tier) |
-| Frontend | Vite dev server | Azure Static Web Apps |
-| Backend | Uvicorn | Azure Container Apps |
-| Telemetry | Console logs | Application Insights |
-| Auth | None (local dev) | Azure Key Vault tokens |
-
-Controlled by environment variables — same codebase, different providers.
-
-### System Architecture
-
-```
-User Browser
-    │
-    ▼
-┌─────────────────────┐         ┌─────────────────────────┐
-│ Static Web App      │  API    │ Container Apps           │
-│ (React + Vite)      │────────▶│ (FastAPI Backend)        │
-└─────────────────────┘         │  ├── LLM Client          │
-                                │  ├── Repository Layer     │
-                                │  └── Telemetry Module     │
-                                └────┬──────────┬──────────┘
-                                     │          │
-                            ┌────────┘          └────────┐
-                            ▼                            ▼
-                    ┌──────────────┐            ┌──────────────┐
-                    │ MCP Server   │            │ Azure Foundry│
-                    │ (8 tools)    │            │ GPT-4.1-nano │
-                    └──────────────┘            └──────────────┘
-                                                       │
-                                               ┌───────┴───────┐
-                                               │  Cosmos DB    │
-                                               │  (Free Tier)  │
-                                               └───────────────┘
-```
-
-![CI/CD Pipeline](docs/diagrams/cicd_pipeline.png)
-
----
-
-## MCP Tools (8)
+The agent has access to 8 modular tools via the MCP protocol. For full technical details on adding or modifying tools, see [`docs/mcp_tools.md`](docs/mcp_tools.md).
 
 | # | Tool | Description | Example |
 |---|------|-------------|---------|
@@ -97,23 +100,15 @@ User Browser
 | 7 | `hash_generator` | MD5, SHA-1, SHA-256, SHA-512 | `hash_generator("hello", "sha256")` |
 | 8 | `random_generator` | Random numbers, UUIDs, passwords | `random_generator("password", length=16)` |
 
-### Multi-Step Reasoning Examples
-
-| Prompt | Tool Chain |
-|--------|-----------|
-| "What's the SHA-256 of today's date?" | datetime_tool → hash_generator |
-| "Convert 98.6°F to Celsius" | unit_converter |
-| "Generate a random number 1-1000 and multiply by 3" | random_generator → calculator |
-
 ---
 
-## Azure Deployment
+## Azure Deployment Guide
 
 ### Prerequisites
 
-- Azure CLI (`az login`)
+- Azure CLI (`az login` authenticated)
 - Terraform >= 1.5
-- GitHub repo with secrets configured
+- GitHub repository with configured secrets
 
 ### Deploy with Terraform
 
@@ -124,143 +119,55 @@ terraform plan
 terraform apply
 ```
 
-### Resources Provisioned
+### Required GitHub Secrets for CI/CD
 
-| Service | SKU | Monthly Cost |
-|---------|-----|-------------|
-| Static Web Apps | Free | $0 |
-| Container Apps | Consumption | $0 (free allotment) |
-| Cosmos DB | Free Tier (1000 RU/s) | $0 |
-| AI Foundry (GPT-4.1-nano) | Pay-per-token | ~$0.20-0.50 |
-| Container Registry | Basic | ~$5 |
-| Application Insights | Free (5GB) | $0 |
-| **Total** | | **~$5-6/mo** |
-
-### GitHub Secrets Required
-
-| Secret | Source |
-|--------|--------|
-| `AZURE_CREDENTIALS` | `az ad sp create-for-rbac` |
-| `SWA_DEPLOYMENT_TOKEN` | `terraform output swa_deployment_token` |
-| `BACKEND_URL` | `terraform output backend_url` |
+| Secret Name | Description / Source |
+|-------------|----------------------|
+| `AZURE_CREDENTIALS` | Generated via `az ad sp create-for-rbac` |
+| `SWA_DEPLOYMENT_TOKEN` | Output from `terraform output swa_deployment_token` |
+| `BACKEND_URL` | Output from `terraform output backend_url` |
 
 ---
 
-## CI/CD Pipeline
+## Application Environment Variables
 
-Push to `main` triggers:
+The system architecture seamlessly toggles between local and cloud modes using the following environment variables:
 
-1. **Backend Tests** — pytest with pip caching
-2. **Frontend Build** — npm ci + lint + build with npm caching
-3. **Docker Build** — Buildx with layer caching
-4. **Deploy** — Push to ACR, update Container Apps, deploy Static Web App
-5. **Post-Deploy Smoke Tests** — Health check + task creation on live endpoint
-
----
-
-## API Reference
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | Readiness probe |
-| `GET` | `/api/llm/status` | LLM provider health |
-| `POST` | `/api/task` | Submit task `{"prompt": "..."}` |
-| `GET` | `/api/task/{id}/stream` | SSE execution stream |
-| `GET` | `/api/task/{id}` | Task detail with traces |
-| `GET` | `/api/tasks` | List all tasks |
-| `POST` | `/api/auth/login` | Authenticate with email + token |
-
----
-
-## Environment Variables
-
-| Variable | Default | Cloud Value |
-|----------|---------|-------------|
-| `LLM_PROVIDER` | `ollama` | `azure_foundry` |
+| Variable | Local Default | Cloud Value (Azure) |
+|----------|---------------|---------------------|
+| `LLM_PROVIDER` | `ollama` | `foundry` |
 | `DATABASE_BACKEND` | `sqlite` | `cosmos` |
 | `OLLAMA_HOST` | `http://localhost:11434` | — |
 | `OLLAMA_MODEL` | `qwen2.5:0.5b` | — |
 | `FOUNDRY_ENDPOINT` | — | AI Foundry URL |
-| `FOUNDRY_API_KEY` | — | From Key Vault |
+| `FOUNDRY_API_KEY` | — | Extracted via Azure Identity |
 | `FOUNDRY_MODEL` | `gpt-4.1-nano` | `gpt-4.1-nano` |
-| `COSMOS_ENDPOINT` | — | Cosmos DB URL |
-| `COSMOS_KEY` | — | From Key Vault |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | — | App Insights CS |
-| `KEY_VAULT_URL` | — | Azure Key Vault URL |
+| `COSMOS_ENDPOINT` | — | Cosmos DB Connection URL |
+| `COSMOS_KEY` | — | Managed via Azure Key Vault |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | — | App Insights Connection String |
+| `KEY_VAULT_URL` | — | Azure Key Vault Endpoint URL |
 
 ---
 
-## Running Tests
+## Authentication & RBAC
 
-```bash
-cd backend && python -m pytest -v
-# 47 tests pass in ~5s
-```
-
----
-
-## Project Structure
-
-```
-BMO/
-├── backend/
-│   ├── main.py              # FastAPI entry point
-│   ├── router.py            # API endpoints
-│   ├── agent.py             # ReAct loop (provider-agnostic)
-│   ├── llm_client.py        # LLM abstraction (Ollama/Foundry)
-│   ├── repository.py        # DB abstraction (SQLite/Cosmos)
-│   ├── telemetry.py         # Azure Monitor integration
-│   ├── models.py            # SQLModel entities
-│   ├── database.py          # Engine config
-│   ├── auth.py              # Authentication middleware
-│   └── tests/
-├── frontend/
-│   └── src/
-│       ├── App.tsx           # Main app (Terminal Luxe design)
-│       └── index.css         # Design system
-├── mcp_server/
-│   └── mcp_server.py        # 8 MCP tools
-├── infra/
-│   ├── main.tf              # All Azure resources
-│   └── outputs.tf           # Deployment URLs
-├── docs/
-│   ├── generate_diagrams.py  # Architecture diagram generator
-│   └── diagrams/            # PNG architecture diagrams
-├── .github/workflows/
-│   └── deploy.yml           # CI/CD with caching
-├── docker-compose.yml
-└── IMPLEMENTATION_PLAN.md
-```
+The cloud deployment utilizes robust token-based authentication:
+- **Allowed Users**: Pre-registered email addresses.
+- **Login Mechanism**: Email + generated access token pairing.
+- **Secure Storage**: Access tokens are stored securely in Azure Key Vault (comparable to AWS Secrets Manager).
+- **Local Fallback**: Authentication is completely bypassed during local development unless `KEY_VAULT_URL` or `AUTH_ENABLED` is explicitly configured.
 
 ---
 
-## Authentication
+## Documentation Index
 
-The cloud deployment includes token-based authentication:
+For in-depth, code-level documentation and UML diagrams, please review the files inside the `docs/` folder:
+- **[System Architecture](docs/architecture.md)**
+- **[Backend API Design](docs/backend_api.md)**
+- **[LLM Configuration & Integrations](docs/llm_configuration.md)**
+- **[MCP Tooling Protocol](docs/mcp_tools.md)**
 
-- **Allowed users**: Pre-registered email addresses stored in Azure Key Vault
-- **Login**: Email + generated access token
-- **Tokens**: Stored securely in Azure Key Vault (equivalent to AWS Secrets Manager)
-- **Local dev**: Auth disabled by default (no KEY_VAULT_URL set)
-
----
-
-## Challenge Requirements Checklist
-
-| Requirement | Status |
-|-------------|--------|
-| Working agent with tool calling | Done (8 tools) |
-| ReAct reasoning loop | Done (bounded, 10 iterations) |
-| Real-time execution streaming | Done (SSE) |
-| Persistent execution traces | Done (SQLite/Cosmos) |
-| Unit tests | Done (47 tests) |
-| Docker containerization | Done (Compose + production) |
-| Retry/error handling | Done (exponential backoff) |
-| Multi-step reasoning | Done (tool chaining) |
-| RBAC | Done (auth + roles) |
-| Cloud deployment | Done (Azure, Terraform) |
-| CI/CD pipeline | Done (GitHub Actions) |
-| Architecture documentation | Done (diagrams + docs) |
+*(Note: Frontend-specific UI documentation is deliberately kept light in favor of heavier backend and system design documentation).*
 
 ---
 
