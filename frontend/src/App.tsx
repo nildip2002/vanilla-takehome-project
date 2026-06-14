@@ -82,9 +82,10 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    if (view === 'history') fetchHistory()
-  }, [view, fetchHistory])
+  const switchView = useCallback((v: View) => {
+    setView(v)
+    if (v === 'history') fetchHistory()
+  }, [fetchHistory])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -267,14 +268,14 @@ function App() {
         <nav className="sidebar-nav">
           <button
             className={`nav-btn ${view === 'agent' ? 'active' : ''}`}
-            onClick={() => setView('agent')}
+            onClick={() => switchView('agent')}
           >
             <span className="nav-icon">&#9654;</span>
             <span className="nav-label">Execute</span>
           </button>
           <button
             className={`nav-btn ${view === 'history' ? 'active' : ''}`}
-            onClick={() => setView('history')}
+            onClick={() => switchView('history')}
           >
             <span className="nav-icon">&#9776;</span>
             <span className="nav-label">History</span>
