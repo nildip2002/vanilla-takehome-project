@@ -82,10 +82,10 @@ function App() {
     }
   }, [])
 
-  const switchView = useCallback((v: View) => {
+  const switchView = (v: View) => {
     setView(v)
     if (v === 'history') fetchHistory()
-  }, [fetchHistory])
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

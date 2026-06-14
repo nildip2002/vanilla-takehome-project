@@ -1,100 +1,85 @@
 # Production Multi-Agent System Architecture
 
-> **Context**: This document describes how BMO Agent would evolve from its current coding-challenge scope into a fully productionized **Multi-Agent System (MAS)** with autonomous CI/CD, QA validation, DevOps automation, Human-in-the-Loop (HITL) guardrails, and enterprise-grade cloud infrastructure — mapped to both **Azure** and **AWS** equivalents.
+> **Context**: This document describes the production evolution of the BMO Agentic Execution Framework — from a single ReAct-loop agent to a fully productionized **Multi-Agent System (MAS)** with enterprise-grade security, progressive CI/CD, HITL guardrails, and zero-trust networking on Azure.
+
+---
+
+## Architecture Diagrams
+
+All diagrams generated with the Python `diagrams` library using official Azure cloud icons.
+
+| Diagram | Description |
+|---------|-------------|
+| ![System Architecture](diagrams/prod_system_architecture.png) | Full production topology |
+| ![Auth Flow](diagrams/prod_auth_flow.png) | Entra ID + Microsoft Graph authentication |
+| ![Network Security](diagrams/prod_network_security.png) | Zero-trust VNet with private endpoints |
+| ![CI/CD Pipeline](diagrams/prod_cicd_pipeline.png) | Agent-enhanced deployment pipeline |
+| ![Observability](diagrams/prod_observability.png) | Distributed tracing + agent metrics |
 
 ---
 
 ## Table of Contents
 
 1. [Current State vs Production Vision](#current-state-vs-production-vision)
-2. [Multi-Agent System Architecture](#multi-agent-system-architecture)
+2. [System Architecture](#system-architecture)
 3. [Agent Taxonomy](#agent-taxonomy)
-4. [Orchestration Patterns](#orchestration-patterns)
-5. [HITL Guardrails Framework](#hitl-guardrails-framework)
-6. [Cloud Infrastructure — Azure vs AWS](#cloud-infrastructure--azure-vs-aws)
+4. [Identity & Authentication (Entra ID)](#identity--authentication-entra-id)
+5. [Network Security (Zero Trust)](#network-security-zero-trust)
+6. [Messaging & Orchestration](#messaging--orchestration)
 7. [CI/CD with Autonomous Agents](#cicd-with-autonomous-agents)
-8. [Data & Observability Stack](#data--observability-stack)
-9. [Security & Compliance](#security--compliance)
-10. [Implementation Roadmap](#implementation-roadmap)
+8. [HITL Guardrails Framework](#hitl-guardrails-framework)
+9. [Observability & Incident Response](#observability--incident-response)
+10. [Data Architecture](#data-architecture)
+11. [Cost Model & Scaling](#cost-model--scaling)
+12. [Implementation Roadmap](#implementation-roadmap)
 
 ---
 
 ## Current State vs Production Vision
 
-| Dimension | Current (Challenge) | Production MAS |
-|-----------|-------------------|----------------|
-| Agent count | 1 (ReAct loop) | 10+ specialized agents |
-| Orchestration | Single sequential loop | Planner → child agents (sync + async) |
-| Tools | 8 MCP tools | 50+ tools + external API integrations |
-| LLM | Single model (Ollama/GPT-4.1-nano) | Model routing (GPT-4o for planning, GPT-4.1-nano for tools, Claude for code) |
-| CI/CD | GitHub Actions (static YAML) | Self-healing pipeline with QA + DevOps agents |
-| Auth | Token-based | Azure AD / AWS Cognito with Security Groups |
-| Guardrails | Content Safety filter only | Multi-layer HITL with approval workflows |
-| Observability | App Insights | Full distributed tracing + agent-level metrics |
-| State | SQLite/Cosmos (simple) | Event-sourced with saga pattern |
+| Dimension | Current (Challenge Scope) | Production MAS |
+|-----------|--------------------------|----------------|
+| **Agents** | 1 (ReAct loop) | 7+ specialized agents |
+| **Orchestration** | Single sequential loop | DAG-based planner with fan-out/fan-in |
+| **Tools** | 8 MCP tools (local subprocess) | 50+ tools + external APIs + Microsoft Graph |
+| **LLM** | Ollama (local) / GPT-4.1-nano (cloud) | Model routing: GPT-4o (planning) + GPT-4.1-nano (tools) + Claude (code) |
+| **Auth** | Token in Key Vault | Microsoft Entra ID + Conditional Access + RBAC |
+| **Network** | Public Container App | VNet-isolated + Private Endpoints + WAF + DDoS |
+| **CI/CD** | GitHub Actions (static YAML) | Agent-enhanced pipeline with canary + auto-rollback |
+| **Guardrails** | Content Safety filter only | 3-tier HITL (auto / notify / approve) |
+| **Observability** | App Insights (basic) | Full OpenTelemetry + Sentinel SIEM + agent-level metrics |
+| **State** | SQLite / Cosmos DB (simple) | Event-sourced with Change Feed + saga pattern |
+| **Compliance** | None | SOC2 / ISO27001 audit trail, PII masking, immutable logs |
 
 ---
 
-## Multi-Agent System Architecture
+## System Architecture
+
+**See:** `diagrams/prod_system_architecture.png`
 
 ### High-Level Topology
 
 ```
-                          ┌─────────────────────┐
-                          │     Human User       │
-                          │  (HITL Approver)      │
-                          └──────────┬────────────┘
-                                     │ Approval / Override
-                          ┌──────────▼────────────┐
-                          │   API Gateway          │
-                          │   (Auth + Rate Limit)  │
-                          └──────────┬────────────┘
-                                     │
-                          ┌──────────▼────────────┐
-                          │   PLANNER AGENT        │
-                          │   (Orchestrator)       │
-                          │   ┌────────────────┐   │
-                          │   │ Task Decomposer│   │
-                          │   │ DAG Builder     │   │
-                          │   │ Priority Queue  │   │
-                          │   └────────────────┘   │
-                          └──┬───┬───┬───┬───┬────┘
-                             │   │   │   │   │
-              ┌──────────────┘   │   │   │   └──────────────┐
-              ▼                  ▼   │   ▼                  ▼
-     ┌────────────┐    ┌──────────┐ │ ┌──────────┐  ┌────────────┐
-     │ Research   │    │ Code     │ │ │ Data     │  │ DevOps     │
-     │ Agent      │    │ Agent    │ │ │ Agent    │  │ Agent      │
-     │ (async)    │    │ (sync)   │ │ │ (async)  │  │ (async)    │
-     └────────────┘    └──────────┘ │ └──────────┘  └────────────┘
-                                    │
-                           ┌────────▼────────┐
-                           │   QA Agent       │
-                           │   (validates     │
-                           │    all outputs)  │
-                           └─────────────────┘
+Internet → Azure Front Door (WAF + DDoS) → API Management (Auth + Rate Limit)
+    → App Gateway (L7 LB) → Agent Fleet (Container Apps, VNet-isolated)
+        ↕ Azure Service Bus (task dispatch)
+        ↕ Azure AI Foundry (GPT-4o / GPT-4.1-nano with Content Safety)
+        ↕ Cosmos DB (event-sourced state, Change Feed)
+        ↕ Azure AI Search (RAG for Research Agent)
+        ↕ Key Vault (managed identity, no secrets in code)
+    Telemetry → App Insights → Log Analytics → Microsoft Sentinel (SIEM)
 ```
 
-### Core Principle: DAG-Based Execution
+### Core Design Decisions
 
-The Planner Agent decomposes every task into a **Directed Acyclic Graph (DAG)** of subtasks. Each node is assigned to a specialized child agent. Edges define dependencies.
-
-```python
-# Pseudocode: Planner Agent task decomposition
-class TaskDAG:
-    """DAG of subtasks produced by the Planner Agent."""
-    nodes: list[SubTask]       # Each assigned to a child agent
-    edges: list[Dependency]    # (parent_id, child_id) — child waits for parent
-    execution_mode: dict[str, Literal["sync", "async"]]  # Per-node
-
-class SubTask:
-    id: str
-    agent_type: AgentType      # research, code, data, devops, qa
-    prompt: str                # Instruction for the child agent
-    requires_hitl: bool        # If True, pause for human approval before executing
-    timeout_seconds: int
-    retry_policy: RetryPolicy
-```
+| Decision | Rationale |
+|----------|-----------|
+| **Container Apps** over AKS | Per-agent auto-scaling (0→N), no cluster mgmt overhead, built-in Dapr integration |
+| **Service Bus** over direct HTTP | Decouples agents, enables async fan-out, dead-letter for failed tasks, at-least-once delivery |
+| **Event Grid** for completion events | Push-based delivery to planner, filtered subscriptions per agent type |
+| **Durable Functions** for sagas | Handles long-running multi-step workflows with checkpoint/resume and timer-based HITL timeouts |
+| **Cosmos DB Change Feed** | Real-time event streaming to other services without polling |
+| **Private Endpoints** everywhere | Zero public surface for data services — all traffic stays on Azure backbone |
 
 ---
 
@@ -104,421 +89,492 @@ class SubTask:
 
 | Property | Value |
 |----------|-------|
-| **Role** | Decomposes complex tasks into subtask DAGs, assigns to child agents |
-| **LLM** | GPT-4o / Claude Opus (strongest reasoning) |
-| **Invocation** | Synchronous — always the entry point |
-| **HITL** | Presents execution plan for approval before dispatching |
+| **LLM** | GPT-4o (strongest reasoning for decomposition) |
+| **Scaling** | Always-on (min 1 replica) |
+| **Managed Identity** | `mi-planner` — scoped to Service Bus send + Cosmos DB read/write |
+| **HITL** | Presents execution plan before dispatching high-risk subtasks |
 
-**Capabilities:**
-- Parse ambiguous natural language into structured plans
-- Identify parallelizable subtasks (async fan-out)
-- Estimate cost/time budgets per subtask
-- Re-plan on child agent failure (self-healing)
+**Responsibilities:**
+- Parse user intent into a DAG of subtasks
+- Assign to child agents via Service Bus topics
+- Aggregate results, detect conflicts, re-plan on failure
+- Enforce budget/time constraints per-task
 
-### 2. Research Agent
-
-| Property | Value |
-|----------|-------|
-| **Role** | Web search, document retrieval, knowledge synthesis |
-| **LLM** | GPT-4o-mini (fast, cost-effective) |
-| **Invocation** | Async — results don't block other agents |
-| **Tools** | Web search API, RAG over internal docs, PDF parser |
-
-### 3. Code Agent
+### 2. Code Agent
 
 | Property | Value |
 |----------|-------|
-| **Role** | Generate, review, refactor, and test code |
-| **LLM** | Claude Sonnet / GPT-4o (strong code generation) |
-| **Invocation** | Sync — downstream agents depend on output |
-| **Tools** | Code interpreter, linter, test runner, git operations |
-| **HITL** | Required for production code changes |
+| **LLM** | Claude Sonnet 4.x (best code generation) / GPT-4o (review) |
+| **Tools** | Git API, linter, test runner, code interpreter |
+| **Managed Identity** | `mi-code-agent` — scoped to Azure Repos + ACR read |
+| **HITL** | **Tier 3** (approval required) for production commits |
+
+### 3. Research Agent
+
+| Property | Value |
+|----------|-------|
+| **LLM** | GPT-4o-mini (cost-effective for search + synthesis) |
+| **Tools** | Bing Search API, Azure AI Search (RAG), PDF parser |
+| **Managed Identity** | `mi-research` — scoped to AI Search read |
+| **HITL** | Tier 1 (auto) for internal search; Tier 2 (notify) for external APIs |
 
 ### 4. Data Agent
 
 | Property | Value |
 |----------|-------|
-| **Role** | Query databases, transform data, generate reports |
-| **LLM** | GPT-4.1-nano (structured output, low cost) |
-| **Invocation** | Async — can run in parallel with research |
-| **Tools** | SQL executor, pandas operations, chart generator |
+| **LLM** | GPT-4.1-nano (structured output, lowest cost) |
+| **Tools** | SQL executor (read-only), pandas, chart generator |
+| **Managed Identity** | `mi-data` — scoped to Cosmos DB **read-only** |
+| **HITL** | Tier 3 for any write operations; Tier 1 for SELECT queries |
 
 ### 5. QA Agent
 
 | Property | Value |
 |----------|-------|
-| **Role** | Validates outputs from ALL other agents before delivery |
 | **LLM** | GPT-4o (high accuracy for validation) |
-| **Invocation** | Sync — final gate before user delivery |
-| **HITL** | Auto-escalates to human when confidence < 85% |
-
-**Validation checks:**
-- Factual accuracy (cross-reference with sources)
-- Code correctness (run tests, static analysis)
-- Security scan (secrets, injection vulnerabilities)
-- Compliance (PII detection, content policy)
+| **Role** | Final gate — validates ALL agent outputs before user delivery |
+| **Checks** | Factual accuracy, code correctness (runs tests), security scan, PII detection |
+| **Auto-escalation** | If confidence < 85%, routes to human review |
 
 ### 6. DevOps Agent
 
 | Property | Value |
 |----------|-------|
-| **Role** | Infrastructure management, deployment, monitoring |
-| **LLM** | GPT-4.1-nano (structured IaC generation) |
-| **Invocation** | Async — operates on infrastructure independently |
-| **Tools** | Terraform executor, kubectl, cloud CLI, log analyzer |
-| **HITL** | **Always required** — no autonomous infra changes |
+| **LLM** | GPT-4.1-nano (structured IaC) |
+| **Tools** | Terraform executor, `az` CLI, log analyzer, metrics query |
+| **Managed Identity** | `mi-devops` — scoped to Container Apps + Monitor read |
+| **HITL** | **Always Tier 3** — no autonomous infrastructure changes |
 
 ### 7. CI/CD Agent
 
 | Property | Value |
 |----------|-------|
-| **Role** | Manages build pipelines, test orchestration, release gates |
 | **LLM** | GPT-4.1-nano |
-| **Invocation** | Event-driven (triggered by git push, PR, schedule) |
-| **Tools** | GitHub API, test runners, artifact registries |
+| **Trigger** | Event-driven (GitHub webhook → Event Grid) |
+| **Tools** | GitHub API, test orchestrator, ACR push |
+| **HITL** | Tier 2 for staging; Tier 3 for production |
 
 ---
 
-## Orchestration Patterns
+## Identity & Authentication (Entra ID)
 
-### Pattern 1: Synchronous Chain
+**See:** `diagrams/prod_auth_flow.png`
 
-```
-Planner → Code Agent → QA Agent → User
-```
-
-Used when each step strictly depends on the previous output.
-
-### Pattern 2: Async Fan-Out / Fan-In
+### Authentication Flow (Production)
 
 ```
-                ┌→ Research Agent (async) ──┐
-Planner ────────┤                           ├──→ QA Agent → User
-                └→ Data Agent (async)   ────┘
+1. User → Microsoft Entra ID (OIDC login)
+2. Entra ID → Conditional Access (MFA + compliant device check)
+3. Conditional Access → App Registration (issue JWT + refresh token)
+4. User → API Management (Bearer token in Authorization header)
+5. APIM → JWT validation (signature, audience, expiry, roles)
+6. APIM → Backend API (validated claims in X-MS-CLIENT-PRINCIPAL)
+7. Backend → Agent Fleet (on-behalf-of flow OR managed identity)
 ```
 
-Used when independent subtasks can run in parallel. The Planner fans out, collects results, then fans in for QA.
+### Key Components
 
-### Pattern 3: Event-Driven Pipeline (CI/CD)
+| Component | Azure Service | Purpose |
+|-----------|---------------|---------|
+| **Identity Provider** | Microsoft Entra ID (Azure AD) | SSO, federation, B2B guest access |
+| **MFA / Device Trust** | Conditional Access | Block untrusted devices, require MFA for admin ops |
+| **App Registration** | Entra App Registrations | OAuth2 client (frontend SPA + backend API) |
+| **API Auth** | API Management (JWT policy) | Validate tokens, extract claims, rate-limit per user |
+| **Agent Identity** | Managed Identities (System-Assigned) | Passwordless auth to Azure services — no secrets stored |
+| **Secrets Rotation** | Key Vault (auto-rotation policy) | External API keys rotated every 90 days |
+| **RBAC** | Entra Roles + Cosmos RBAC | Role-based data access (reader / contributor / admin) |
+| **Audit** | Entra Sign-In Logs → Sentinel | All auth events forwarded to SIEM |
+
+### Microsoft Graph Integration
 
 ```
-git push → CI/CD Agent → Code Agent (review) → QA Agent (test)
-    → DevOps Agent (deploy) → HITL Gate → Production
+Backend uses Microsoft Graph API for:
+- Reading user profile (displayName, email, photo) for UI
+- Checking group membership for role assignment
+- Sending Teams notifications for HITL approvals
+- Calendar integration for scheduling agent tasks
+
+Required Graph Permissions:
+- User.Read (delegated) — profile info
+- GroupMember.Read.All (application) — RBAC group checks  
+- ChannelMessage.Send (application) — Teams notifications
+- Calendars.Read (delegated) — scheduling context
 ```
 
-### Implementation: Message Queue Architecture
+### Entra ID App Registrations
 
-```python
-# Azure: Azure Service Bus / AWS: Amazon SQS + SNS
-class AgentMessage:
-    task_id: str
-    parent_task_id: str | None
-    agent_type: AgentType
-    payload: dict
-    execution_mode: Literal["sync", "async"]
-    priority: int              # 0=critical, 10=background
-    created_at: datetime
-    deadline: datetime | None  # Timeout
-    hitl_required: bool
-
-# Sync: Agent publishes result directly, caller awaits
-# Async: Agent publishes to completion topic, Planner subscribes
-```
-
-| Component | Azure | AWS |
-|-----------|-------|-----|
-| Task Queue | Azure Service Bus | Amazon SQS |
-| Event Bus | Event Grid | Amazon EventBridge |
-| Async Fan-Out | Service Bus Topics | SNS Topics → SQS |
-| Workflow Engine | Durable Functions | AWS Step Functions |
-| Agent Compute | Container Apps (per-agent) | ECS Fargate (per-agent) |
+| App | Type | Permissions |
+|-----|------|-------------|
+| `bmo-agent-spa` | SPA (public client) | `User.Read`, `api://bmo-agent-api/Tasks.ReadWrite` |
+| `bmo-agent-api` | Web API (confidential) | `GroupMember.Read.All`, `ChannelMessage.Send` |
+| `bmo-agent-daemon` | Daemon (client credentials) | `Application.Read.All` (for health checks) |
 
 ---
 
-## HITL Guardrails Framework
+## Network Security (Zero Trust)
 
-### Three-Tier Approval Model
+**See:** `diagrams/prod_network_security.png`
+
+### Network Topology
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   TIER 1: AUTOMATIC                      │
-│  Low-risk operations execute without human approval      │
-│  Examples: text processing, calculations, data queries   │
-│  Confidence threshold: > 95%                             │
-└───────────────────────────┬─────────────────────────────┘
-                            │ Confidence 85-95%
-┌───────────────────────────▼─────────────────────────────┐
-│                   TIER 2: NOTIFY & PROCEED               │
-│  Medium-risk: executes but notifies human for review     │
-│  Examples: research synthesis, report generation         │
-│  Human can retroactively reject within SLA               │
-└───────────────────────────┬─────────────────────────────┘
-                            │ Confidence < 85% OR high-risk
-┌───────────────────────────▼─────────────────────────────┐
-│                   TIER 3: APPROVAL REQUIRED              │
-│  High-risk: paused until human explicitly approves       │
-│  Examples: code deployment, infra changes, external API  │
-│  Timeout: auto-reject after 4 hours                      │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│ Internet → Azure Front Door (Global LB + WAF + DDoS Protection L4) │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ Hub VNet (10.0.0.0/16)                                               │
+│   ├── Azure Firewall (egress filtering, FQDN rules)                  │
+│   ├── Azure Bastion (admin jump box, no public IPs on VMs)           │
+│   └── VNet Peering → Spoke                                           │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ Spoke VNet - Application (10.1.0.0/16)                               │
+│   ├── Subnet: agents (10.1.1.0/24)                                   │
+│   │     └── Container Apps Environment (VNet-injected, no public IP) │
+│   ├── Subnet: data (10.1.2.0/24)                                     │
+│   │     ├── Private Endpoint → Cosmos DB                             │
+│   │     ├── Private Endpoint → Key Vault                             │
+│   │     ├── Private Endpoint → AI Foundry                            │
+│   │     └── Private Endpoint → AI Search                             │
+│   └── NSG Rules: deny-all-inbound, allow App Gateway → agents only   │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-### HITL Integration Points
+### Security Controls
 
-| Agent | Auto (Tier 1) | Notify (Tier 2) | Approve (Tier 3) |
-|-------|--------------|-----------------|------------------|
-| Research | Factual lookups | Synthesis/summaries | External API calls |
-| Code | Read-only analysis | Code suggestions | Production commits |
-| Data | SELECT queries | Data transformations | Schema migrations |
-| DevOps | Log viewing | Scaling decisions | **All infra changes** |
-| QA | Test execution | Flaky test overrides | Release gate bypass |
-
-### Approval Workflow (Azure / AWS)
-
-| Component | Azure | AWS |
-|-----------|-------|-----|
-| Approval Queue | Azure Service Bus + Logic Apps | SQS + Step Functions wait state |
-| Notification | Microsoft Teams webhook | Slack via SNS + Lambda |
-| Approval UI | Power Apps / custom React page | Custom React page |
-| Audit Log | Cosmos DB + Immutable Blobs | DynamoDB + S3 (WORM) |
-| Timeout | Durable Functions timer | Step Functions timeout |
+| Layer | Control | Implementation |
+|-------|---------|----------------|
+| **Edge** | DDoS Protection Standard | Auto-mitigation for L3/L4 volumetric attacks |
+| **Edge** | WAF (OWASP 3.2) | SQL injection, XSS, request smuggling, bot detection |
+| **Edge** | Geo-filtering | Block traffic from non-business regions |
+| **Network** | Hub-Spoke VNet | Segmentation — agents isolated from other workloads |
+| **Network** | Azure Firewall | Egress filtering — agents can ONLY reach approved FQDNs |
+| **Network** | Private Endpoints | All PaaS services accessed over private IP (no public access) |
+| **Network** | NSGs | Micro-segmentation — only ALB → agents traffic allowed |
+| **Transport** | mTLS (Dapr) | Service-to-service encryption with auto-rotated certs |
+| **Identity** | Managed Identity | No credentials in code, secrets, or env vars |
+| **Data** | Encryption at rest | AES-256 (Cosmos DB, Key Vault, Blob Storage) |
+| **Data** | PII masking | Pre-LLM middleware strips emails, phone numbers, SSNs |
+| **Application** | Content Safety | Azure Content Safety v2 on all LLM inputs/outputs |
+| **Application** | Prompt injection detection | Input validation middleware before LLM calls |
+| **Compliance** | Microsoft Defender for Cloud | Continuous posture assessment, vulnerability scanning |
+| **Audit** | Microsoft Sentinel | SIEM with ML-based anomaly detection on agent behavior |
 
 ---
 
-## Cloud Infrastructure — Azure vs AWS
+## Messaging & Orchestration
 
-### Compute & Networking
+### Service Bus Topology
 
-| Component | Azure | AWS |
-|-----------|-------|-----|
-| **API Gateway** | Azure API Management | Amazon API Gateway |
-| **Agent Compute** | Container Apps (per-agent scaling) | ECS Fargate tasks |
-| **Background Workers** | Azure Functions (Durable) | AWS Lambda + Step Functions |
-| **Service Mesh** | Container Apps internal DNS | App Mesh / ECS Service Connect |
-| **Load Balancer** | Application Gateway | ALB |
-| **CDN / Frontend** | Static Web Apps | CloudFront + S3 |
-| **DNS** | Azure DNS | Route 53 |
+```
+Service Bus Namespace: sb-bmo-agent-prod
+├── Topic: agent-tasks
+│   ├── Subscription: planner-tasks (filter: agent_type = 'planner')
+│   ├── Subscription: code-tasks (filter: agent_type = 'code')
+│   ├── Subscription: research-tasks (filter: agent_type = 'research')
+│   ├── Subscription: data-tasks (filter: agent_type = 'data')
+│   ├── Subscription: qa-tasks (filter: agent_type = 'qa')
+│   └── Subscription: devops-tasks (filter: agent_type = 'devops')
+├── Topic: agent-results
+│   └── Subscription: planner-results (all results go to planner)
+├── Queue: hitl-approvals (dead-letter after 4h timeout)
+└── Queue: dead-letter (failed messages for investigation)
+```
 
-### AI / LLM Stack
+### Message Schema
 
-| Component | Azure | AWS |
-|-----------|-------|-----|
-| **LLM Gateway** | Azure AI Foundry | Amazon Bedrock |
-| **Model Routing** | Foundry model catalog (1900+ models) | Bedrock model access |
-| **Content Safety** | Azure Content Safety (built-in) | Bedrock Guardrails |
-| **Prompt Mgmt** | Foundry Prompt Flow | Bedrock Prompt Management |
-| **Fine-Tuning** | Foundry fine-tuning jobs | Bedrock Custom Models |
-| **Embeddings / RAG** | Azure AI Search + Foundry | Bedrock Knowledge Bases + OpenSearch |
-| **Agent Framework** | Foundry Agent Service / Semantic Kernel | Bedrock Agents / LangGraph |
-| **Eval & Tracing** | Foundry Evaluation | Bedrock Invocation Logging + CloudWatch |
+```json
+{
+  "task_id": "uuid",
+  "parent_task_id": "uuid | null",
+  "agent_type": "code | research | data | qa | devops | cicd",
+  "priority": 0,
+  "payload": {
+    "prompt": "string",
+    "context": {},
+    "tools_allowed": ["git", "test_runner"],
+    "budget_tokens": 50000,
+    "deadline_utc": "2026-06-14T12:00:00Z"
+  },
+  "hitl_required": false,
+  "retry_policy": {
+    "max_retries": 3,
+    "backoff_seconds": [5, 30, 120]
+  }
+}
+```
 
-### Data & State
+### Saga Pattern (Durable Functions)
 
-| Component | Azure | AWS |
-|-----------|-------|-----|
-| **Primary DB** | Cosmos DB (NoSQL) | DynamoDB |
-| **Event Store** | Event Hubs + Cosmos Change Feed | Kinesis + DynamoDB Streams |
-| **Cache** | Azure Cache for Redis | ElastiCache (Redis) |
-| **Blob Storage** | Azure Blob Storage | S3 |
-| **Search** | Azure AI Search | OpenSearch Serverless |
-| **Message Queue** | Service Bus | SQS / SNS |
-| **Workflow State** | Durable Functions storage | Step Functions state |
+For multi-agent workflows that must be atomic (all-or-nothing):
 
-### Security & Identity
-
-| Component | Azure | AWS |
-|-----------|-------|-----|
-| **Identity Provider** | Microsoft Entra ID (Azure AD) | AWS IAM Identity Center (SSO) |
-| **App Auth** | Entra ID App Registration | Cognito User Pools |
-| **Secrets** | Azure Key Vault | AWS Secrets Manager |
-| **Managed Identity** | System-Assigned Managed Identity | IAM Roles for Tasks |
-| **Network Security** | NSG + Private Endpoints | Security Groups + VPC Endpoints |
-| **WAF** | Azure WAF on App Gateway | AWS WAF on CloudFront/ALB |
-| **Compliance** | Microsoft Defender for Cloud | AWS Security Hub |
-
-### Observability
-
-| Component | Azure | AWS |
-|-----------|-------|-----|
-| **Metrics** | Azure Monitor + App Insights | CloudWatch Metrics |
-| **Logs** | Log Analytics Workspace | CloudWatch Logs |
-| **Traces** | App Insights Distributed Tracing | X-Ray |
-| **Dashboards** | Azure Workbooks / Grafana | CloudWatch Dashboards / Grafana |
-| **Alerting** | Azure Monitor Alerts | CloudWatch Alarms + SNS |
-| **Agent-Level Metrics** | Custom App Insights events | Custom CloudWatch metrics |
+```
+Saga: DeployNewFeature
+├── Step 1: Code Agent → generate code ✓
+├── Step 2: QA Agent → run tests ✓
+├── Step 3: HITL → await approval ✓ (4h timeout)
+├── Step 4: DevOps Agent → canary deploy
+│   └── If fails → compensate: rollback canary, notify, log
+├── Step 5: Monitor → 15min health check
+│   └── If fails → compensate: full rollback, incident created
+└── Step 6: DevOps Agent → promote to 100%
+```
 
 ---
 
 ## CI/CD with Autonomous Agents
 
-### Self-Healing Pipeline Architecture
+**See:** `diagrams/prod_cicd_pipeline.png`
+
+### Pipeline Stages
+
+| Stage | Agent | Action | HITL Level |
+|-------|-------|--------|------------|
+| 1. Trigger | CI/CD Agent | Receive webhook, parse diff, identify affected services | Auto |
+| 2. Review | Code Agent | Automated code review (style, bugs, security) | Notify |
+| 3. Test Gen | QA Agent | Generate tests for new code paths, run full suite | Auto |
+| 4. Security | - | SAST (Semgrep), DAST (OWASP ZAP), dependency audit | Auto |
+| 5. Build | CI/CD Agent | Docker build with layer caching, push to ACR | Auto |
+| 6. Gate | HITL | Human reviews agent findings, approves deploy | **Approve** |
+| 7. Canary | DevOps Agent | Deploy to 1% traffic, monitor error rate | Auto |
+| 8. Promote | DevOps Agent | 1% → 10% → 50% → 100% with health gates | Notify |
+| 9. Monitor | DevOps Agent | Watch metrics 30min post-deploy, auto-rollback on regression | Auto |
+
+### Progressive Canary Rollout
 
 ```
-Developer pushes code
-        │
-        ▼
-┌───────────────────────────────────────────────────────────┐
-│                CI/CD Agent (Event-Driven)                  │
-│                                                           │
-│  1. ANALYZE: Parse diff, identify affected components     │
-│  2. PLAN: Generate test strategy based on changes         │
-│  3. DISPATCH:                                             │
-│     ├─→ Code Agent: automated code review (async)         │
-│     ├─→ QA Agent: generate + run tests (async)            │
-│     └─→ Security scan (async)                             │
-│  4. GATE: Collect results, make go/no-go decision         │
-│  5. DEPLOY (if approved):                                 │
-│     └─→ DevOps Agent: progressive rollout (HITL Tier 3)   │
-│  6. MONITOR:                                              │
-│     └─→ Watch error rates post-deploy, auto-rollback      │
-└───────────────────────────────────────────────────────────┘
-```
+Traffic Splitting (Azure Container Apps Revision Weights):
 
-### Pipeline Stages with Agent Integration
-
-| Stage | Traditional CI/CD | Agent-Enhanced CI/CD |
-|-------|------------------|---------------------|
-| **Code Review** | Manual PR review | Code Agent generates review, human approves |
-| **Test Generation** | Static test suite | QA Agent generates tests for new code paths |
-| **Test Execution** | Run all tests | QA Agent prioritizes tests by risk, runs subset |
-| **Security Scan** | SAST/DAST tools | Code Agent interprets findings, suggests fixes |
-| **Deploy Decision** | Human approves | CI/CD Agent recommends, HITL gate for prod |
-| **Rollout** | All-at-once | DevOps Agent does canary (1% → 10% → 100%) |
-| **Post-Deploy** | Manual monitoring | DevOps Agent watches metrics, auto-rollbacks |
-| **Incident Response** | PagerDuty → human | DevOps Agent triages, proposes fix, HITL approves |
-
-### Progressive Deployment (Canary)
-
-```
-DevOps Agent Canary Rollout:
-
-  Step 1: Deploy to 1% traffic     ──→ Monitor 15 min
-  Step 2: Promote to 10% traffic   ──→ Monitor 15 min
-  Step 3: Promote to 50% traffic   ──→ Monitor 30 min
-  Step 4: Promote to 100%          ──→ HITL notification
+  T+0m:   new=1%   old=99%   ← Deploy canary
+  T+15m:  new=10%  old=90%   ← If error_rate < 0.1% && p99 < 2x baseline
+  T+30m:  new=50%  old=50%   ← If above holds
+  T+60m:  new=100% old=0%    ← Full promotion + HITL notification
 
   Auto-Rollback Triggers:
-  - Error rate > 1% (p99)
-  - Latency > 2x baseline
-  - Any 5xx from new revision
-  - QA Agent flags regression in synthetic tests
+  - 5xx error rate > 0.5%
+  - p99 latency > 2x baseline
+  - Any OOMKilled container
+  - QA Agent flags regression in synthetic probes
+```
+
+### Self-Healing Pipeline
+
+When a test fails in CI:
+
+```
+1. CI/CD Agent detects test failure
+2. CI/CD Agent sends failing test + stack trace to Code Agent
+3. Code Agent attempts automated fix (max 3 attempts)
+4. QA Agent re-runs tests after each fix attempt
+5. If fixed → continue pipeline (notify human of auto-fix)
+6. If unfixed after 3 attempts → block pipeline, create incident, notify team
 ```
 
 ---
 
-## Data & Observability Stack
+## HITL Guardrails Framework
 
-### Agent-Level Metrics
+### Three-Tier Model
 
-Each agent emits standardized telemetry:
+| Tier | Risk Level | Behavior | Examples |
+|------|-----------|----------|----------|
+| **Tier 1: Auto** | Low | Execute immediately, log for audit | Text processing, calculations, read-only queries |
+| **Tier 2: Notify** | Medium | Execute + send Teams notification for retroactive review | Research synthesis, code suggestions, staging deploys |
+| **Tier 3: Approve** | High | **Pause** until human explicitly approves in Teams/UI | Production deploys, infra changes, external API calls, data writes |
+
+### Approval Workflow Implementation
+
+```
+1. Agent reaches HITL decision point
+2. Durable Function creates approval record in Cosmos DB
+3. Logic App sends adaptive card to Microsoft Teams channel
+4. Human clicks Approve/Reject/Modify on card
+5. Teams webhook → Logic App → Cosmos DB update
+6. Durable Function resumes orchestration
+7. If timeout (4 hours) → auto-reject + notify team lead
+```
+
+### Risk Scoring Algorithm
 
 ```python
-class AgentMetrics:
-    agent_type: str
-    task_id: str
-    # Performance
-    latency_ms: float
-    token_input: int
-    token_output: int
-    llm_model_used: str
-    # Quality
-    confidence_score: float        # 0.0 - 1.0
-    hitl_escalated: bool
-    hitl_outcome: str | None       # "approved" | "rejected" | "modified"
-    # Cost
-    estimated_cost_usd: float
-    # Reliability
-    retry_count: int
-    error_type: str | None
-```
+def calculate_risk_tier(action: AgentAction) -> int:
+    score = 0
+    if action.modifies_production:     score += 40
+    if action.calls_external_api:      score += 20
+    if action.writes_data:             score += 15
+    if action.cost_estimate_usd > 1:   score += 10
+    if action.agent_confidence < 0.85: score += 15
 
-### Event-Sourced Architecture
-
-All agent actions are stored as immutable events for full auditability:
-
-```
-Event Store Schema:
-┌──────────────────────────────────────────────────────┐
-│ event_id │ task_id │ agent │ type        │ timestamp │
-│──────────┼─────────┼───────┼─────────────┼───────────│
-│ evt-001  │ tsk-42  │ plan  │ task_created│ 10:00:01  │
-│ evt-002  │ tsk-42  │ plan  │ dag_built   │ 10:00:03  │
-│ evt-003  │ tsk-42  │ code  │ assigned    │ 10:00:03  │
-│ evt-004  │ tsk-42  │ data  │ assigned    │ 10:00:03  │
-│ evt-005  │ tsk-42  │ data  │ completed   │ 10:00:08  │
-│ evt-006  │ tsk-42  │ code  │ hitl_needed │ 10:00:10  │
-│ evt-007  │ tsk-42  │ code  │ hitl_approve│ 10:02:30  │
-│ evt-008  │ tsk-42  │ qa    │ validated   │ 10:02:35  │
-│ evt-009  │ tsk-42  │ plan  │ completed   │ 10:02:36  │
-└──────────────────────────────────────────────────────┘
+    if score >= 40: return 3  # Approve required
+    if score >= 20: return 2  # Notify
+    return 1                   # Auto
 ```
 
 ---
 
-## Security & Compliance
+## Observability & Incident Response
 
-### Zero-Trust Agent Security Model
+**See:** `diagrams/prod_observability.png`
+
+### Agent Telemetry Schema
+
+Every agent emits standardized OpenTelemetry spans:
+
+```json
+{
+  "trace_id": "abc123",
+  "span_name": "agent.code.execute_task",
+  "attributes": {
+    "agent.type": "code",
+    "agent.task_id": "tsk-456",
+    "agent.model": "claude-sonnet-4-6",
+    "agent.tokens.input": 3200,
+    "agent.tokens.output": 890,
+    "agent.confidence": 0.92,
+    "agent.hitl_escalated": false,
+    "agent.cost_usd": 0.0041,
+    "agent.tools_called": ["git_diff", "test_runner"],
+    "agent.retry_count": 0
+  },
+  "duration_ms": 4500
+}
+```
+
+### Dashboards (Azure Workbooks)
+
+| Dashboard | KQL Queries | SLO |
+|-----------|-------------|-----|
+| Agent Latency | p50/p95/p99 per agent type | p99 < 30s (planning), p99 < 10s (tools) |
+| Token Spend | Daily/weekly token consumption per model | < $50/day |
+| HITL Metrics | Approval rate, avg wait time, timeout rate | Approval wait < 15 min |
+| Error Budget | Error rate by agent, auto-rollback frequency | < 0.1% error rate |
+| Cost Allocation | Per-agent, per-user, per-task cost breakdown | Track against $200/mo budget |
+
+### Incident Response (Automated)
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  Security Layers                         │
-│                                                         │
-│  Layer 1: NETWORK                                       │
-│    - All agents in private VNet / VPC                    │
-│    - No public internet access for agents                │
-│    - API Gateway is the only ingress point               │
-│                                                         │
-│  Layer 2: IDENTITY                                      │
-│    - Each agent has its own Managed Identity / IAM Role  │
-│    - Least-privilege: Code Agent can't touch infra       │
-│    - Scoped secrets: agents only see their own keys      │
-│                                                         │
-│  Layer 3: DATA                                          │
-│    - All data encrypted at rest (AES-256)                │
-│    - All inter-agent communication over mTLS             │
-│    - PII detection and masking before LLM calls          │
-│                                                         │
-│  Layer 4: LLM                                           │
-│    - Content Safety filters on all LLM calls             │
-│    - Prompt injection detection middleware               │
-│    - Output validation before delivery to user           │
-│    - Token budget enforcement per-agent                  │
-│                                                         │
-│  Layer 5: AUDIT                                         │
-│    - Immutable event log (append-only)                   │
-│    - All HITL decisions recorded with approver identity   │
-│    - Compliance reports auto-generated weekly             │
-└─────────────────────────────────────────────────────────┘
+1. Anomaly detected (Sentinel ML rule: unusual token spend, repeated failures)
+2. Severity classified: P1 (production down) / P2 (degraded) / P3 (investigation)
+3. P1/P2: Auto-kill affected agent, rollback to last-known-good, page on-call
+4. P3: Create investigation task, assign to DevOps Agent for triage
+5. All incidents → immutable Cosmos event store for post-mortem
 ```
+
+---
+
+## Data Architecture
+
+### Event-Sourced State (Cosmos DB)
+
+```
+Container: events (partition key: /task_id)
+├── event_type: task_created | dag_built | agent_assigned | agent_completed
+│              | hitl_requested | hitl_resolved | task_completed | task_failed
+├── agent_type: planner | code | research | data | qa | devops | cicd
+├── timestamp: ISO 8601
+├── payload: {} (agent-specific data)
+└── _ts: Cosmos server timestamp (immutable)
+
+Container: projections (partition key: /entity_id)
+├── Current state materialized from events via Change Feed
+├── task_status: "pending" | "in_progress" | "awaiting_hitl" | "completed" | "failed"
+└── Updated by Azure Function triggered on Change Feed
+```
+
+### Change Feed Pipeline
+
+```
+Cosmos DB Change Feed → Azure Functions → 
+├── Update projection (current state)
+├── Push to Event Grid (notify planner of completions)
+├── Forward to Log Analytics (observability)
+└── Archive to Blob Storage (cold storage, compliance)
+```
+
+---
+
+## Cost Model & Scaling
+
+### Estimated Monthly Cost (Production)
+
+| Service | SKU | Cost/mo |
+|---------|-----|---------|
+| Container Apps (7 agents) | Consumption (scale 0→5) | ~$30 |
+| Azure AI Foundry (GPT-4o) | Pay-per-token (~2M tokens/day) | ~$60 |
+| Azure AI Foundry (GPT-4.1-nano) | Pay-per-token (~5M tokens/day) | ~$15 |
+| Cosmos DB | 1000 RU/s (autoscale to 4000) | ~$25 |
+| Service Bus | Standard tier | ~$10 |
+| Front Door + WAF | Standard tier | ~$35 |
+| Key Vault | Standard (1000 ops/mo) | ~$1 |
+| App Insights | 5GB/mo (free) + overage | ~$5 |
+| Log Analytics | 5GB/mo retention | ~$5 |
+| VNet + Private Endpoints | 5 endpoints | ~$10 |
+| **Total** | | **~$196/mo** |
+
+### Scaling Strategy
+
+| Component | Trigger | Scale |
+|-----------|---------|-------|
+| Planner Agent | Always on | Fixed 1-2 replicas |
+| Worker Agents | Service Bus queue depth > 5 | 0 → 5 replicas per agent type |
+| Cosmos DB | RU consumption > 70% | Autoscale 1000 → 4000 RU/s |
+| AI Foundry | Token rate limiting | Multiple deployments with load balancing |
 
 ---
 
 ## Implementation Roadmap
 
 ### Phase 1: Foundation (Weeks 1-4)
-- [ ] Implement message queue architecture (Service Bus / SQS)
-- [ ] Build Planner Agent with DAG decomposition
-- [ ] Add HITL Tier 3 approval workflow for all agents
-- [ ] Migrate auth to Entra ID / Cognito
 
-### Phase 2: Core Agents (Weeks 5-8)
-- [ ] Implement Code Agent with git integration
-- [ ] Implement QA Agent with test generation
-- [ ] Implement Data Agent with SQL/pandas tools
-- [ ] Add async fan-out/fan-in orchestration
+- [ ] Migrate auth from Key Vault tokens → Entra ID App Registration
+- [ ] Set up Hub-Spoke VNet with Private Endpoints
+- [ ] Deploy Service Bus namespace with agent topic/subscriptions
+- [ ] Implement Planner Agent with DAG decomposition
+- [ ] Add Durable Functions for saga orchestration
+- [ ] Wire up Microsoft Graph for Teams notifications
 
-### Phase 3: DevOps & CI/CD Agents (Weeks 9-12)
-- [ ] Implement DevOps Agent with Terraform/kubectl tools
-- [ ] Build CI/CD Agent triggered by GitHub webhooks
-- [ ] Implement canary deployment with auto-rollback
-- [ ] Add self-healing pipeline (auto-fix failing tests)
+### Phase 2: Agent Fleet (Weeks 5-8)
 
-### Phase 4: Polish & Scale (Weeks 13-16)
-- [ ] Implement HITL Tier 1 and Tier 2 (auto + notify)
-- [ ] Add model routing (cost-optimized LLM selection)
-- [ ] Build observability dashboards (agent-level metrics)
-- [ ] Load testing and horizontal scaling validation
-- [ ] Compliance audit and penetration testing
+- [ ] Implement Code Agent (Claude integration + git tools)
+- [ ] Implement QA Agent (test generation + validation)
+- [ ] Implement Research Agent (Azure AI Search RAG)
+- [ ] Implement Data Agent (read-only SQL + pandas)
+- [ ] Add async fan-out/fan-in via Service Bus
+- [ ] Deploy Conditional Access policies (MFA, device compliance)
+
+### Phase 3: DevOps & CI/CD Automation (Weeks 9-12)
+
+- [ ] Implement DevOps Agent with Terraform/az CLI tools
+- [ ] Build CI/CD Agent (GitHub webhook → Event Grid)
+- [ ] Implement canary rollout with auto-rollback
+- [ ] Self-healing pipeline (auto-fix failing tests)
+- [ ] Progressive traffic splitting in Container Apps
+
+### Phase 4: Harden & Scale (Weeks 13-16)
+
+- [ ] Deploy Azure Front Door with WAF rules
+- [ ] Enable Microsoft Sentinel with custom detection rules
+- [ ] Implement full HITL approval flow via Teams adaptive cards
+- [ ] Load testing (Locust) + chaos engineering (Azure Chaos Studio)
+- [ ] SOC2 audit trail validation
+- [ ] Penetration testing (external firm)
+- [ ] Documentation + runbooks for on-call team
 
 ---
 
-> **Note**: This document represents the target architecture for a production enterprise deployment. The current BMO Agent implementation demonstrates the core patterns (ReAct loop, tool calling, streaming, persistence) that serve as the foundation for this vision. The architecture is designed to scale incrementally — each phase builds on the previous without requiring rewrites.
+## Key Differences from Current Implementation
+
+| What exists now | What production adds |
+|----------------|---------------------|
+| `backend/auth.py` — token in Key Vault | Entra ID + Conditional Access + Microsoft Graph |
+| `backend/telemetry.py` — App Insights basic | Full OpenTelemetry + Sentinel SIEM + agent-level custom metrics |
+| `backend/agent.py` — single ReAct loop | Planner + 6 specialized child agents communicating via Service Bus |
+| `infra/main.tf` — flat resources | Hub-Spoke VNet + Private Endpoints + WAF + DDoS |
+| `.github/workflows/deploy.yml` — simple CI/CD | Agent-enhanced pipeline with canary + self-healing + HITL gates |
+| `backend/repository.py` — CRUD | Event-sourced with Change Feed projections + saga pattern |
+
+---
+
+> **Note**: This architecture is designed for incremental adoption. Each phase builds on the previous without requiring rewrites. The current BMO Agent codebase already implements the core patterns (ReAct loop, tool calling, streaming, persistence, LLM abstraction, repository pattern) that serve as the direct foundation for Phase 1.

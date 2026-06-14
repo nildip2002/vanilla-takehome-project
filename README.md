@@ -170,7 +170,7 @@ For in-depth, code-level documentation and UML diagrams, please review the files
 - **[Backend API Design](docs/backend_api.md)**
 - **[LLM Configuration & Integrations](docs/llm_configuration.md)**
 - **[MCP Tooling Protocol](docs/mcp_tools.md)**
-- **[Production Multi-Agent Architecture](docs/production_multi_agent_architecture.md)** — Full vision for a productionized MAS with Planner/Child agents, HITL guardrails, CI/CD automation agents, and Azure vs AWS infrastructure mapping.
+- **[Production Multi-Agent Architecture](docs/production_multi_agent_architecture.md)** — Full vision for a productionized MAS with detailed Azure cloud diagrams (Entra ID, zero-trust networking, Service Bus orchestration, agent-enhanced CI/CD with canary rollouts, and distributed observability stack).
 
 *(Note: Frontend-specific UI documentation is deliberately kept light in favor of heavier backend and system design documentation).*
 
