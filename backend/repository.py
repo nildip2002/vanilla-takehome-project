@@ -26,6 +26,7 @@ class Repository(Protocol):
     def get_task(self, task_id: str) -> dict | None: ...
     def update_task(self, task_id: str, **fields) -> dict | None: ...
     def list_tasks(self) -> list[dict]: ...
+    def delete_task(self, task_id: str) -> bool: ...
     def create_trace(self, task_id: str, step: int, category: str, content: str) -> dict: ...
     def get_traces(self, task_id: str) -> list[dict]: ...
 
@@ -111,6 +112,25 @@ class SQLModelRepository:
             }
             for t in tasks
         ]
+
+    def delete_task(self, task_id: str) -> bool:
+        """Delete a task and its associated traces."""
+        from sqlmodel import select
+        try:
+            task = self._session.get(AgentTask, uuid.UUID(task_id))
+        except ValueError:
+            return False
+        if not task:
+            return False
+        # Delete associated traces first
+        traces = self._session.exec(
+            select(ExecutionTrace).where(ExecutionTrace.task_id == uuid.UUID(task_id))
+        ).all()
+        for trace in traces:
+            self._session.delete(trace)
+        self._session.delete(task)
+        self._session.commit()
+        return True
 
     def create_trace(self, task_id: str, step: int, category: str, content: str) -> dict:
         trace = ExecutionTrace(
@@ -218,6 +238,23 @@ class CosmosRepository:
             enable_cross_partition_query=True,
         ))
         return results
+
+    def delete_task(self, task_id: str) -> bool:
+        """Delete a task and its associated traces from Cosmos DB."""
+        task = self.get_task(task_id)
+        if not task:
+            return False
+        # Delete traces
+        traces = list(self._traces.query_items(
+            query="SELECT c.id, c.task_id FROM c WHERE c.task_id = @task_id",
+            parameters=[{"name": "@task_id", "value": task_id}],
+            enable_cross_partition_query=True,
+        ))
+        for trace in traces:
+            self._traces.delete_item(item=trace["id"], partition_key=trace.get("task_id", trace["id"]))
+        # Delete the task itself
+        self._tasks.delete_item(item=task_id, partition_key=task.get("user_id", task_id))
+        return True
 
     def create_trace(self, task_id: str, step: int, category: str, content: str) -> dict:
         trace_id = str(uuid.uuid4())

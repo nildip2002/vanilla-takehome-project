@@ -387,7 +387,7 @@ function App() {
             {selectedTask ? (
               <div className="task-detail-view">
                 <button className="back-btn" onClick={() => setSelectedTask(null)}>
-                  &#8592; Back
+                  &#8592; Back to Dashboard
                 </button>
                 <div className="detail-card">
                   <div className="detail-header">
@@ -397,6 +397,9 @@ function App() {
                     <span className="detail-time">
                       {new Date(selectedTask.created_at).toLocaleString()}
                     </span>
+                  </div>
+                  <div className="detail-meta-row">
+                    <span className="detail-uuid">ID: {selectedTask.id}</span>
                   </div>
                   <div className="detail-input">{selectedTask.raw_input}</div>
 
@@ -433,35 +436,103 @@ function App() {
                 </div>
               </div>
             ) : (
-              <div className="history-grid">
+              <>
+                {/* Dashboard Stats */}
+                <div className="dashboard-header">
+                  <h2 className="dashboard-title">Execution History</h2>
+                  <span className="dashboard-count">{history.length} tasks</span>
+                </div>
+
+                <div className="stats-grid">
+                  <div className="stat-card stat-total">
+                    <div className="stat-value">{history.length}</div>
+                    <div className="stat-label">Total Runs</div>
+                  </div>
+                  <div className="stat-card stat-success">
+                    <div className="stat-value">
+                      {history.filter(t => t.execution_status === 'completed').length}
+                    </div>
+                    <div className="stat-label">Completed</div>
+                  </div>
+                  <div className="stat-card stat-fail">
+                    <div className="stat-value">
+                      {history.filter(t => t.execution_status === 'failed').length}
+                    </div>
+                    <div className="stat-label">Failed</div>
+                  </div>
+                  <div className="stat-card stat-pending">
+                    <div className="stat-value">
+                      {history.filter(t => t.execution_status === 'pending' || t.execution_status === 'running').length}
+                    </div>
+                    <div className="stat-label">Pending</div>
+                  </div>
+                </div>
+
                 {history.length === 0 ? (
                   <div className="empty-state">
                     <div className="empty-icon">&#9671;</div>
                     <p>No tasks yet. Execute one from the Agent tab.</p>
                   </div>
                 ) : (
-                  history.map(task => (
-                    <div
-                      key={task.id}
-                      className="history-card"
-                      onClick={() => inspectTask(task)}
-                    >
-                      <div className="history-card-top">
-                        <span className={`status-badge status-${task.execution_status}`}>
-                          {task.execution_status}
-                        </span>
-                        <span className="history-time">
-                          {new Date(task.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="history-input">{task.raw_input}</div>
-                      {task.final_output && (
-                        <div className="history-output">{task.final_output}</div>
-                      )}
-                    </div>
-                  ))
+                  <div className="dashboard-table-wrap">
+                    <table className="dashboard-table">
+                      <thead>
+                        <tr>
+                          <th>Status</th>
+                          <th>Task ID</th>
+                          <th>Question</th>
+                          <th>Answer</th>
+                          <th>Timestamp</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {history.map(task => (
+                          <tr key={task.id} className="dashboard-row" onClick={() => inspectTask(task)}>
+                            <td>
+                              <span className={`status-badge status-${task.execution_status}`}>
+                                {task.execution_status}
+                              </span>
+                            </td>
+                            <td className="cell-uuid" title={task.id}>
+                              {task.id.slice(0, 8)}…
+                            </td>
+                            <td className="cell-question">{task.raw_input}</td>
+                            <td className="cell-answer">
+                              {task.final_output
+                                ? task.final_output.length > 80
+                                  ? task.final_output.slice(0, 80) + '…'
+                                  : task.final_output
+                                : <span className="text-muted">—</span>}
+                            </td>
+                            <td className="cell-time">
+                              {new Date(task.created_at).toLocaleString(undefined, {
+                                month: 'short', day: 'numeric',
+                                hour: '2-digit', minute: '2-digit'
+                              })}
+                            </td>
+                            <td>
+                              <button
+                                className="delete-btn"
+                                title="Delete task"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (confirm('Delete this task and all its traces?')) {
+                                    fetch(`${API_BASE}/api/task/${task.id}`, { method: 'DELETE' })
+                                      .then(() => fetchHistory())
+                                  }
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         )}

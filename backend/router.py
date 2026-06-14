@@ -2,12 +2,13 @@
 API Router — Exposes RESTful + SSE endpoints for the Agent Controller.
 
 Endpoints:
-  POST /api/task           — Submit a new task for agent processing
-  GET  /api/task/{id}/stream — Stream execution traces via SSE
-  GET  /api/tasks          — List all historical tasks
-  GET  /api/task/{id}      — Get a single task with its traces
-  GET  /api/health         — Health check
-  GET  /api/llm/status     — LLM provider health check
+  POST   /api/task              — Submit a new task for agent processing
+  GET    /api/task/{id}/stream   — Stream execution traces via SSE
+  GET    /api/tasks             — List all historical tasks
+  GET    /api/task/{id}         — Get a single task with its traces
+  DELETE /api/task/{id}         — Delete a task and its traces
+  GET    /api/health            — Health check
+  GET    /api/llm/status        — LLM provider health check
 """
 
 import logging
@@ -139,6 +140,22 @@ def get_task_detail(task_id: str, repo=Depends(_get_repo)):
     traces = repo.get_traces(task_id)
     task["traces"] = traces
     return task
+
+
+@router.delete("/task/{task_id}")
+def delete_task(task_id: str, repo=Depends(_get_repo)):
+    """Delete a task and all its associated execution traces."""
+    import uuid
+    try:
+        uuid.UUID(task_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid task_id format")
+
+    if not repo.delete_task(task_id):
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    logger.info("Deleted task %s", task_id)
+    return {"deleted": True, "task_id": task_id}
 
 
 # ─── Authentication Endpoints ─────────────────────────────────────────────────
