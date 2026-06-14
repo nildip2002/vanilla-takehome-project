@@ -147,7 +147,7 @@ resource "azurerm_cognitive_account" "foundry" {
   name                = "ai-${local.prefix}-prod"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
-  kind                = "AIServices"
+  kind                = "OpenAI"
   sku_name            = "S0"
 
   tags = local.tags
@@ -163,8 +163,8 @@ resource "azurerm_cognitive_deployment" "model" {
     version = "2025-04-14"
   }
 
-  sku {
-    name     = "GlobalStandard"
+  scale {
+    type     = "Standard"
     capacity = 10
   }
 }
