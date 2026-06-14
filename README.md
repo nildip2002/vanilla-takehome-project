@@ -47,7 +47,17 @@ The agent utilizes a ReAct loop to iteratively break down complex tasks, select 
 
 ### CI/CD Pipeline
 
-Continuous Integration and Continuous Deployment are managed via GitHub Actions. Pushing to the `main` branch automatically triggers testing, building, and deployment to the Azure cloud environment.
+Continuous Integration and Continuous Deployment are managed via GitHub Actions. Every push triggers a **5-stage pipeline** with unit tests both pre- and post-deploy:
+
+| Stage | Job | What it does |
+|-------|-----|-------------|
+| 1 | `backend-test` | Runs **pytest** unit test suite (90+ tests across `test_main.py` + `test_extended.py`) against all backend modules |
+| 2 | `frontend-build` | ESLint + TypeScript check + Vite production build |
+| 3 | `docker-build` | Docker Buildx with layer caching (validates image builds) |
+| 4 | `deploy` | Push image to ACR → update Container App → deploy SWA frontend |
+| 5 | `post-deploy-test` | **Smoke tests against live deployment** (health, task creation, task listing) |
+
+All stages use **dependency caching** (pip, npm, Docker layers) for fast CI runs.
 
 ![CI/CD Pipeline](docs/diagrams/cicd_pipeline.png)
 
@@ -149,6 +159,53 @@ The system architecture seamlessly toggles between local and cloud modes using t
 
 ---
 
+## Azure AI Foundry — Production Managed Services
+
+In the production Azure environment, the system leverages **Microsoft Azure AI Foundry** (formerly Azure OpenAI + Azure AI Studio) as the managed AI platform. Below is how each Foundry service would orchestrate the multi-agent system:
+
+| Foundry Service | How We Use It | Purpose |
+|----------------|---------------|---------|
+| **Model Deployments** | GPT-4.1-nano deployed via `azurerm_cognitive_deployment` | Primary LLM for tool-calling agent (cheapest model with function calling) |
+| **Content Safety** | Built-in content filters on every model deployment | Blocks harmful prompts/outputs before they reach users — no custom code needed |
+| **Prompt Flow** | Orchestrates multi-step agent reasoning chains | Would replace our custom ReAct loop with a visual, versioned, testable flow |
+| **Model Catalog** (1900+ models) | Access GPT-4o, Claude, Mistral, Llama without infra changes | Enables model routing — GPT-4o for planning, GPT-4.1-nano for tools, Claude for code review |
+| **Evaluation** | Automated quality scoring of agent outputs | CI/CD integration — fail deployments if eval scores regress below threshold |
+| **Tracing** | Built-in LLM call tracing with token counts + latency | Feeds into App Insights for cost attribution per-agent per-task |
+| **Fine-Tuning** | Custom model training on domain-specific data | Train a specialized tool-calling model on our 8 MCP tools for better accuracy |
+| **Agent Service** | Managed agent hosting with tool definitions | Production replacement for our subprocess-based MCP server — Azure manages scaling |
+| **Connections** | Secure credential store for external APIs | Connects to Azure AI Search, Bing, custom APIs without exposing keys in code |
+| **Responsible AI** | Fairness analysis, explainability, PII detection | Compliance layer — audit trail of all LLM decisions with bias/harm scoring |
+
+### Orchestration Architecture (Production)
+
+```
+User Request → API Management → Prompt Flow (Orchestrator)
+    ├── Step 1: Intent Classification (GPT-4.1-nano, 0.1s)
+    ├── Step 2: Plan Generation (GPT-4o, 2s)
+    ├── Step 3: Tool Execution (Agent Service → MCP tools)
+    ├── Step 4: Response Synthesis (GPT-4.1-nano, 0.5s)
+    └── Step 5: Content Safety Check → Response
+    
+All steps traced → Foundry Tracing → App Insights → Log Analytics
+Eval scores checked post-response → flag regressions → alert team
+```
+
+### Why Foundry Over Raw OpenAI API
+
+| Concern | Raw API | Azure AI Foundry |
+|---------|---------|-----------------|
+| Content filtering | DIY (prompt engineering) | Built-in, configurable severity levels |
+| Model versioning | Manual `model` string management | Deployment-level versioning with A/B testing |
+| Scaling | Self-managed rate limits | Auto-scaling with PTU (Provisioned Throughput Units) |
+| Compliance | SOC2 via OpenAI | SOC2 + ISO27001 + HIPAA + FedRAMP via Azure |
+| Multi-model | Multiple API keys | Single endpoint, model routing via deployment names |
+| Observability | Custom logging | Native tracing with token-level cost attribution |
+| Guardrails | Custom middleware | Responsible AI dashboard + blocklists + PII filters |
+
+> **Current implementation**: We use `FoundryLLMClient` in `backend/llm_client.py` which calls the Azure OpenAI-compatible endpoint. This is the entry point — migrating to full Prompt Flow orchestration requires only changing the agent loop, not the client interface.
+
+---
+
 ## Authentication & RBAC
 
 The cloud deployment uses a lightweight **email + access token** system scoped for this coding challenge:
@@ -168,6 +225,7 @@ The cloud deployment uses a lightweight **email + access token** system scoped f
 For in-depth, code-level documentation and UML diagrams, please review the files inside the `docs/` folder:
 - **[System Architecture](docs/architecture.md)**
 - **[Backend API Design](docs/backend_api.md)**
+- **[Database Schema & Data Storage](docs/database_schema.md)** — Complete table definitions, UUID strategy, execution trace structure (what the agent "stack trace" looks like in the DB), Cosmos DB JSON format, cascade deletion, and query examples.
 - **[LLM Configuration & Integrations](docs/llm_configuration.md)**
 - **[MCP Tooling Protocol](docs/mcp_tools.md)**
 - **[Production Multi-Agent Architecture](docs/production_multi_agent_architecture.md)** — Full vision for a productionized MAS with detailed Azure cloud diagrams (Entra ID, zero-trust networking, Service Bus orchestration, agent-enhanced CI/CD with canary rollouts, and distributed observability stack).

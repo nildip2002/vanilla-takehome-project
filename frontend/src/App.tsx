@@ -11,6 +11,7 @@ interface TraceEvent {
 
 interface HistoryTask {
   id: string
+  user_id: string
   raw_input: string
   execution_status: string
   final_output: string | null
@@ -399,7 +400,10 @@ function App() {
                     </span>
                   </div>
                   <div className="detail-meta-row">
-                    <span className="detail-uuid">ID: {selectedTask.id}</span>
+                    <span className="detail-uuid">Task: {selectedTask.id}</span>
+                    {selectedTask.user_id && (
+                      <span className="detail-uuid">User: {selectedTask.user_id}</span>
+                    )}
                   </div>
                   <div className="detail-input">{selectedTask.raw_input}</div>
 
@@ -480,6 +484,7 @@ function App() {
                         <tr>
                           <th>Status</th>
                           <th>Task ID</th>
+                          <th>User</th>
                           <th>Question</th>
                           <th>Answer</th>
                           <th>Timestamp</th>
@@ -496,6 +501,9 @@ function App() {
                             </td>
                             <td className="cell-uuid" title={task.id}>
                               {task.id.slice(0, 8)}…
+                            </td>
+                            <td className="cell-uuid" title={task.user_id}>
+                              {task.user_id ? task.user_id.slice(0, 8) + '…' : '—'}
                             </td>
                             <td className="cell-question">{task.raw_input}</td>
                             <td className="cell-answer">

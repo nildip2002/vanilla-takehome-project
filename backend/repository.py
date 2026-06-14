@@ -105,6 +105,7 @@ class SQLModelRepository:
         return [
             {
                 "id": str(t.id),
+                "user_id": str(t.user_id),
                 "raw_input": t.raw_input,
                 "execution_status": t.execution_status,
                 "final_output": t.final_output,

@@ -684,6 +684,9 @@ html, body, #root {
 /* ─── Detail Meta Row ────────────────────────────────────────────── */
 .detail-meta-row {
   margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .detail-uuid {

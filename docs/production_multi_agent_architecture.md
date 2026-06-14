@@ -324,6 +324,89 @@ Saga: DeployNewFeature
 
 ---
 
+## Azure AI Foundry — Managed Agent Orchestration
+
+In production, the multi-agent system is orchestrated through **Azure AI Foundry** managed services rather than custom code:
+
+### Foundry Services Mapped to Agents
+
+| Foundry Service | Agent It Powers | How |
+|----------------|----------------|-----|
+| **Model Deployments** | All agents | Each agent type gets its own deployment (GPT-4o for Planner, GPT-4.1-nano for Data/DevOps, Claude for Code) |
+| **Prompt Flow** | Planner Agent | Visual DAG builder replaces custom orchestration code — versioned, testable, A/B deployable |
+| **Agent Service** | All child agents | Managed compute for agent execution — auto-scales per queue depth, handles retries |
+| **Content Safety** | QA Agent input | Every LLM call passes through configurable severity filters (hate, violence, self-harm, sexual) |
+| **Evaluation** | QA Agent + CI/CD | Automated eval datasets score agent outputs — fail deploys if accuracy/relevance/groundedness regress |
+| **Tracing** | Observability | Every LLM call logged with: model, tokens, latency, cost — feeds into per-agent dashboards |
+| **Connections** | Research Agent | Secure access to Azure AI Search, Bing, Microsoft Graph without exposing credentials |
+| **Fine-Tuning** | Code Agent | Domain-specific model trained on internal code patterns for better suggestions |
+| **Responsible AI** | Compliance layer | PII detection pre-LLM, bias scoring post-LLM, full audit trail |
+| **Model Catalog** | Model Router | Access 1900+ models (GPT, Claude, Mistral, Llama, Phi) — swap without code changes |
+
+### Prompt Flow as Planner
+
+```
+Prompt Flow: "task_orchestration" (version 3.2.1)
+├── Node: intent_classifier (GPT-4.1-nano, <100ms)
+│   └── Output: {intent, complexity, required_agents[]}
+├── Node: plan_generator (GPT-4o, conditional on complexity > 3)
+│   └── Output: {dag: SubTask[], budget_tokens, deadline}
+├── Node: dispatch_agents (Python node → Service Bus publish)
+│   └── Fan-out to Agent Service instances
+├── Node: collect_results (wait for Event Grid completions)
+├── Node: qa_validation (GPT-4o, schema-validated)
+│   └── Auto-escalate to HITL if confidence < 0.85
+└── Node: synthesize_response (GPT-4.1-nano)
+    └── Final answer to user
+```
+
+### Evaluation Pipeline (CI/CD Integration)
+
+```
+On every PR to agent prompts or flow definitions:
+1. GitHub Action triggers Foundry Evaluation run
+2. Eval dataset: 200 golden test cases per agent type
+3. Metrics scored: groundedness, relevance, coherence, fluency, safety
+4. Gate: ALL metrics must be ≥ baseline (stored in Cosmos DB)
+5. If regression: block merge, create issue, notify team
+6. If improvement: auto-approve, log new baseline
+```
+
+---
+
+## Unit Tests & Quality Gates
+
+### Current Test Suite
+
+The project includes a comprehensive **pytest** test suite (`backend/tests/test_main.py`) covering:
+
+| Test Category | Count | What's Tested |
+|--------------|-------|---------------|
+| API endpoints | 12 | CRUD operations, validation, error responses |
+| Agent execution | 8 | ReAct loop, tool dispatch, trace recording |
+| MCP tools | 8 | Each tool's happy path + edge cases |
+| Authentication | 6 | Login flow, token validation, unauthorized access |
+| Database layer | 7 | Repository pattern, CRUD, concurrent access |
+| Health checks | 3 | LLM status, DB connectivity, overall health |
+| Edge cases | 3 | Invalid UUIDs, empty input, malformed JSON |
+| **Total** | **47** | |
+
+### Test Strategy (Pre + Post Deploy)
+
+```
+Pre-Deploy (CI):
+├── pytest -v --tb=short (all 47 unit tests)
+├── ESLint + TypeScript compilation (frontend)
+└── Docker build validation (catches missing deps)
+
+Post-Deploy (Smoke):
+├── GET /api/health → 200 (backend alive)
+├── POST /api/task → 201 (agent can execute)
+└── GET /api/tasks → 200 (DB connected, data flows)
+```
+
+---
+
 ## CI/CD with Autonomous Agents
 
 **See:** `diagrams/prod_cicd_pipeline.png`

@@ -32,35 +32,17 @@ from models import AgentTask, ExecutionTrace, SystemUser  # noqa: E402
 # Test database setup — file-based SQLite to survive lifespan teardown
 # ---------------------------------------------------------------------------
 import tempfile, os  # noqa: E402
-_test_db_file = os.path.join(BACKEND_DIR, ".test.db")
-TEST_DATABASE_URL = f"sqlite:///{_test_db_file}"
-test_engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 
-# Override the engine BEFORE importing the app so lifespan uses test engine
-from database import set_engine_override  # noqa: E402
-set_engine_override(test_engine)
+# Use the shared engine set up by conftest.py
+from tests.conftest import shared_engine as test_engine  # noqa: E402
 
 from fastapi.testclient import TestClient  # noqa: E402
 from main import app  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def clean_db():
-    """Ensure tables exist and are empty before each test."""
-    SQLModel.metadata.create_all(test_engine)
-    yield
-    # Clean all data after each test
-    with Session(test_engine) as session:
-        session.exec(text("DELETE FROM executiontrace"))
-        session.exec(text("DELETE FROM agenttask"))
-        session.exec(text("DELETE FROM systemuser"))
-        session.commit()
-
-
 def teardown_module():
-    """Remove the test database file after all tests complete."""
-    if os.path.exists(_test_db_file):
-        os.unlink(_test_db_file)
+    """Nothing to clean up — shared DB is managed by conftest.py."""
+    pass
 
 
 client = TestClient(app)
